@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+plotly
+nubra-sdk
+requests
+yfinance
+tqdm
+ta-lib
+openpyxl
