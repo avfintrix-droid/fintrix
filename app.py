@@ -10,37 +10,66 @@ import pytz
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from plotly_template import (
+    PLOTLY_LAYOUT, CANDLE_UP, CANDLE_DOWN,
+    EMA_PRIMARY, EMA_SECONDARY, SIGNAL_MARKER,
+)
+
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────
 # BRANDING + LEVEL MAPPING
 # ─────────────────────────────────────────────────────────
-BRAND_NAME = "Fintrix Analytics"
+BRAND_NAME = "FINTRIX ANALYTICS"
+BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
 
-LEVEL_LABEL = {
-    "15m": "Level 1",
-    "30m": "Level 2",
-    "45m": "Level 3",
-    "60m": "Level 4",
-}
+LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
+
+# Palette (referenced inline where Streamlit needs literal values)
+CLR_BG = "#0B0F14"
+CLR_PANEL = "#121821"
+CLR_ELEVATED = "#172030"
+CLR_BORDER = "#1F2937"
+CLR_TEAL = "#00D1B2"
+CLR_GOLD = "#C9A227"
+CLR_BULL = "#22C55E"
+CLR_BEAR = "#EF4444"
+CLR_WARN = "#F59E0B"
+CLR_TEXT = "#E5E7EB"
+CLR_MUTED = "#9CA3AF"
 
 # ─────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title=f"{BRAND_NAME} · Signal Intelligence",
+    page_title="Fintrix Analytics · Signal Intelligence",
     page_icon="◆",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────
-# PREMIUM GLOBAL CSS
+# INSTITUTIONAL CSS
 # ─────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg-app:       #0B0F14;
+    --bg-panel:     #121821;
+    --bg-elevated:  #172030;
+    --border:       #1F2937;
+    --accent-teal:  #00D1B2;
+    --accent-gold:  #C9A227;
+    --bullish:      #22C55E;
+    --bearish:      #EF4444;
+    --warning:      #F59E0B;
+    --text-primary: #E5E7EB;
+    --text-muted:   #9CA3AF;
+    --zebra-dark:   #0F141C;
+}
 
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -48,344 +77,458 @@ html, body, [class*="css"] {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── PREMIUM OBSIDIAN BACKGROUND ─── */
-.stApp {
-    background:
-        radial-gradient(ellipse at 15% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
-        radial-gradient(ellipse at 85% 100%, rgba(240, 185, 11, 0.04) 0%, transparent 50%),
-        linear-gradient(180deg, #0a0f1c 0%, #06080f 50%, #04060b 100%);
-    min-height: 100vh;
-}
+.stApp { background: var(--bg-app); }
 
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 2rem; padding-bottom: 4rem; max-width: 1500px; }
+.block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px; }
 
-/* ─── LANDING ─── */
-.land-wrap { max-width: 960px; margin: 90px auto 60px; text-align: center; padding: 0 24px; }
+/* ─── Section labels ─── */
+.section-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+/* ─── Landing page ─── */
+.land-wrap {
+    max-width: 900px; margin: 80px auto 60px;
+    text-align: center; padding: 0 24px;
+}
 .land-eyebrow {
-    font-size: 0.78rem; letter-spacing: 0.42em; color: #f0b90b;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 28px;
-    display: inline-block; padding: 8px 20px;
-    border: 1px solid rgba(240, 185, 11, 0.3);
-    border-radius: 999px; background: rgba(240, 185, 11, 0.06);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--accent-gold);
+    margin-bottom: 20px;
 }
 .land-title {
-    font-size: 5.4rem; font-weight: 900; line-height: 0.95;
-    background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 40%, #f0b90b 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    -webkit-text-stroke: 0.5px rgba(240, 185, 11, 0.1);
-    margin: 0 0 24px 0; letter-spacing: -0.045em;
-    filter: drop-shadow(0 4px 40px rgba(240, 185, 11, 0.15));
+    font-size: 3.6rem; font-weight: 700; line-height: 1.05;
+    color: var(--text-primary); margin: 0 0 8px 0;
+    letter-spacing: -0.02em;
+}
+.land-title::after {
+    content: ''; display: block; width: 64px; height: 2px;
+    background: var(--accent-gold); margin: 20px auto 0;
 }
 .land-tagline {
-    font-size: 1.35rem; color: #d0d8e5; font-weight: 500;
-    letter-spacing: 0.02em; margin: 0 0 20px 0; line-height: 1.5;
+    font-size: 1.05rem; color: var(--text-muted);
+    font-weight: 500; letter-spacing: 0.04em;
+    margin: 24px 0 12px 0;
 }
 .land-sub {
-    color: #8a97ab; font-size: 1.05rem; line-height: 1.75;
-    max-width: 640px; margin: 0 auto;
+    color: var(--text-muted); font-size: 0.95rem; line-height: 1.7;
+    max-width: 620px; margin: 0 auto;
 }
 .land-stats {
-    display: flex; gap: 20px; justify-content: center;
-    margin: 56px 0 0; flex-wrap: wrap;
+    display: flex; gap: 1px; justify-content: center;
+    margin: 48px 0 0; flex-wrap: wrap;
+    border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; background: var(--border);
+    max-width: 560px; margin-left: auto; margin-right: auto;
 }
 .land-stat {
-    background: linear-gradient(135deg, rgba(19, 24, 38, 0.9), rgba(12, 16, 26, 0.9));
-    border: 1px solid #1a2235; border-radius: 16px;
-    padding: 24px 40px; min-width: 170px;
-    transition: all 0.3s ease;
-}
-.land-stat:hover {
-    border-color: rgba(240, 185, 11, 0.35);
-    box-shadow: 0 4px 30px rgba(240, 185, 11, 0.08);
-    transform: translateY(-2px);
+    background: var(--bg-panel); padding: 20px 40px; flex: 1;
+    min-width: 150px;
 }
 .land-stat .num {
-    background: linear-gradient(135deg, #ffffff, #f0b90b);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    font-size: 2.2rem; font-weight: 800;
-    font-family: 'JetBrains Mono', monospace; line-height: 1;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.7rem; font-weight: 600; line-height: 1;
 }
 .land-stat .lbl {
-    color: #8a97ab; font-size: 0.72rem; margin-top: 10px;
-    letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+    color: var(--text-muted); font-size: 10px; margin-top: 8px;
+    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600;
 }
 .land-features {
     display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 18px; margin-top: 56px; text-align: left;
+    gap: 1px; margin-top: 48px; text-align: left;
+    background: var(--border); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
 }
 .land-feature {
-    background: linear-gradient(135deg, rgba(19, 24, 38, 0.7), rgba(12, 16, 26, 0.7));
-    border: 1px solid #1a2235; border-radius: 16px; padding: 26px;
-    transition: border-color 0.25s ease;
+    background: var(--bg-panel); padding: 24px;
 }
-.land-feature:hover { border-color: rgba(240, 185, 11, 0.3); }
 .land-feature h4 {
-    color: #eef2f8; font-size: 0.96rem; margin: 0 0 10px 0;
-    font-weight: 700; letter-spacing: -0.01em;
+    color: var(--text-primary); font-size: 0.88rem;
+    margin: 0 0 8px 0; font-weight: 600; letter-spacing: 0.01em;
 }
 .land-feature p {
-    color: #7a8699; font-size: 0.85rem; margin: 0; line-height: 1.65;
+    color: var(--text-muted); font-size: 0.82rem;
+    margin: 0; line-height: 1.6;
 }
 
-/* ─── HERO BANNER ─── */
+/* ─── Hero header ─── */
 .hero-wrap {
-    background:
-        linear-gradient(135deg, rgba(240, 185, 11, 0.06) 0%, rgba(0, 212, 255, 0.04) 100%),
-        linear-gradient(180deg, rgba(19, 24, 38, 0.5), rgba(10, 14, 24, 0.5));
-    border: 1px solid rgba(240, 185, 11, 0.16);
-    border-radius: 20px;
-    padding: 36px 40px; margin-bottom: 24px;
-    box-shadow: 0 12px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.02);
-    position: relative; overflow: hidden;
-}
-.hero-wrap::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(240, 185, 11, 0.6), transparent);
+    background: linear-gradient(180deg, #121821 0%, #0E131A 100%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    position: relative;
 }
 .hero-eyebrow {
-    font-size: 0.72rem; letter-spacing: 0.36em; color: #f0b90b;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 12px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--accent-gold);
+    margin-bottom: 8px;
 }
 .hero-title {
-    font-size: 3.2rem; font-weight: 900; line-height: 1;
-    background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 50%, #f0b90b 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    margin: 0 0 14px 0; letter-spacing: -0.04em;
-    filter: drop-shadow(0 2px 24px rgba(240, 185, 11, 0.12));
+    font-size: 22px; font-weight: 600;
+    color: var(--text-primary); margin: 0 0 6px 0;
+    letter-spacing: -0.005em; line-height: 1.3;
+}
+.hero-title::after {
+    content: ''; display: block; width: 48px; height: 1px;
+    background: var(--accent-gold); margin-top: 10px;
 }
 .hero-sub {
-    color: #b8c4d4; font-size: 1.02rem; margin: 0;
-    font-weight: 500; letter-spacing: 0.01em;
+    color: var(--text-muted); font-size: 12px;
+    margin: 12px 0 0 0; letter-spacing: 0.02em;
 }
 .status-pill {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 8px 18px; border-radius: 999px;
-    font-size: 0.72rem; font-weight: 800;
-    letter-spacing: 0.14em; text-transform: uppercase;
-    margin-top: 20px;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 4px;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    margin-top: 14px;
 }
 .status-live {
-    background: rgba(0, 230, 118, 0.1); color: #00e676;
-    border: 1px solid rgba(0, 230, 118, 0.35);
+    background: rgba(34, 197, 94, 0.1); color: var(--bullish);
+    border: 1px solid rgba(34, 197, 94, 0.35);
 }
 .status-closed {
-    background: rgba(255, 171, 0, 0.08); color: #ffab00;
-    border: 1px solid rgba(255, 171, 0, 0.35);
+    background: rgba(245, 158, 11, 0.08); color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.35);
 }
-.dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot-live {
-    background: #00e676;
-    box-shadow: 0 0 12px #00e676;
-    animation: pulse 1.8s infinite;
-}
-.dot-closed { background: #ffab00; }
-@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+.dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-live { background: var(--bullish); box-shadow: 0 0 6px var(--bullish); }
+.dot-closed { background: var(--warning); }
 
-/* ─── CONTROL CARD ─── */
+/* ─── Control panel ─── */
 .control-card {
-    background: linear-gradient(135deg, rgba(19, 24, 38, 0.95), rgba(12, 16, 26, 0.95));
-    border: 1px solid #1a2235; border-radius: 18px;
-    padding: 28px 32px; margin-bottom: 22px;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+    background: var(--bg-panel);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 22px 26px; margin-bottom: 18px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 .control-title {
-    color: #f0b90b; font-size: 0.74rem; letter-spacing: 0.22em;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 22px;
-    display: flex; align-items: center; gap: 10px;
+    color: var(--text-muted); font-size: 11px; letter-spacing: 0.08em;
+    font-weight: 600; text-transform: uppercase;
+    margin-bottom: 18px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
 }
 
-/* ─── METRIC CARDS ─── */
+/* ─── Metric cards ─── */
 [data-testid="stMetric"] {
-    background: linear-gradient(135deg, #131826 0%, #0d1220 100%);
-    border: 1px solid #1a2235; border-radius: 14px;
-    padding: 20px 22px;
-    box-shadow: 0 4px 28px rgba(0, 0, 0, 0.4);
-    transition: border-color 0.25s ease;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    transition: border-top-color 150ms ease, box-shadow 150ms ease;
 }
-[data-testid="stMetric"]:hover { border-color: rgba(0, 212, 255, 0.25); }
+[data-testid="stMetric"]:hover {
+    border-top-color: var(--accent-teal);
+    box-shadow: 0 1px 6px rgba(0, 209, 178, 0.1);
+}
 [data-testid="stMetricLabel"] {
-    color: #8a97ab !important; font-size: 0.72rem !important;
-    letter-spacing: 0.12em !important; text-transform: uppercase !important;
-    font-weight: 800 !important;
+    color: var(--text-muted) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    font-weight: 600 !important;
 }
 [data-testid="stMetricValue"] {
-    color: #f5f8fc !important;
+    color: var(--text-primary) !important;
     font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 700 !important; font-size: 2rem !important;
-    letter-spacing: -0.02em;
+    font-weight: 600 !important;
+    font-size: 1.6rem !important;
+    letter-spacing: -0.01em;
 }
 [data-testid="stMetricDelta"] {
     font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 600 !important;
+    font-size: 11px !important; font-weight: 500 !important;
 }
 
-/* ─── BUTTONS ─── */
+/* ─── Buttons ─── */
 .stButton > button {
-    border-radius: 12px; font-weight: 700;
-    letter-spacing: 0.08em; transition: all 0.2s ease;
-    border: 1px solid #1e2a3f;
-    background: linear-gradient(180deg, #1a2235, #131826);
-    color: #eef2f8 !important;
-    padding: 0.75rem 1.4rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.65rem 1.2rem;
+    transition: all 150ms ease;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary) !important;
+    height: auto;
 }
 .stButton > button:hover {
-    border-color: rgba(0, 212, 255, 0.4);
-    color: #00d4ff !important;
+    border-color: var(--accent-teal);
+    color: var(--accent-teal) !important;
+    background: rgba(0, 209, 178, 0.04);
 }
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #00d4ff 0%, #00a3cc 100%);
-    color: #06080f !important; border: none; font-weight: 900;
-    letter-spacing: 0.12em; padding: 1rem 2.2rem;
-    font-size: 1rem;
-    box-shadow: 0 8px 32px rgba(0, 212, 255, 0.35);
-    text-transform: uppercase;
+    background: var(--accent-teal);
+    color: #0B0F14 !important;
+    border: 1px solid var(--accent-teal);
+    font-weight: 700;
 }
 .stButton > button[kind="primary"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.55);
-    color: #06080f !important;
+    background: #00E5C4;
+    border-color: #00E5C4;
+    color: #0B0F14 !important;
+    box-shadow: 0 0 20px rgba(0, 209, 178, 0.35);
 }
 .stDownloadButton > button {
-    background: linear-gradient(135deg, #00e676 0%, #00b862 100%);
-    color: #06080f !important; font-weight: 800;
-    border-radius: 12px; border: none; padding: 0.75rem 1.6rem;
-    letter-spacing: 0.06em;
+    border-radius: 6px; font-weight: 600; font-size: 12px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 0.65rem 1.2rem;
+    background: transparent;
+    color: var(--accent-teal) !important;
+    border: 1px solid var(--accent-teal);
+    transition: all 150ms ease;
 }
 .stDownloadButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 28px rgba(0, 230, 118, 0.45);
+    background: rgba(0, 209, 178, 0.08);
+    box-shadow: 0 0 16px rgba(0, 209, 178, 0.2);
 }
 
-/* ─── TABS ─── */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 6px; border-bottom: 1px solid #1a2235;
-    padding-bottom: 0;
-}
-.stTabs [data-baseweb="tab"] {
-    color: #7a8699; font-weight: 700; font-size: 0.82rem;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 12px 22px;
-    transition: color 0.2s ease;
-}
-.stTabs [data-baseweb="tab"]:hover { color: #b8c4d4; }
-.stTabs [aria-selected="true"] {
-    color: #f0b90b !important;
-    border-bottom-color: #f0b90b !important;
-    border-bottom-width: 2px !important;
-}
-
-/* ─── HEADINGS ─── */
-h2, h3, h4 {
-    color: #eef2f8 !important; letter-spacing: -0.015em;
-    font-weight: 700 !important;
-}
-h2 { font-size: 1.35rem !important; margin-top: 1.6rem !important; }
-h3 { font-size: 1.15rem !important; }
-h4 { font-size: 1rem !important; }
-
-/* ─── INPUTS & SELECTS ─── */
-.stSelectbox label, .stMultiSelect label, .stSlider label, .stRadio label {
-    color: #b8c4d4 !important; font-weight: 600 !important;
-    font-size: 0.85rem !important; letter-spacing: 0.02em;
+/* ─── Inputs & selects ─── */
+.stSelectbox label, .stMultiSelect label,
+.stSlider label, .stRadio label, .stTextInput label {
+    color: var(--text-muted) !important;
+    font-weight: 500 !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
 }
 [data-baseweb="select"] > div {
-    background: #131826 !important;
-    border: 1px solid #1a2235 !important;
-    border-radius: 10px !important;
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    color: var(--text-primary) !important;
+}
+[data-baseweb="select"] > div:hover {
+    border-color: rgba(0, 209, 178, 0.4) !important;
+}
+[data-baseweb="select"] > div:focus-within {
+    border-color: var(--accent-teal) !important;
+    box-shadow: 0 0 0 2px rgba(0, 209, 178, 0.15) !important;
+}
+[data-baseweb="tag"] {
+    background: rgba(0, 209, 178, 0.15) !important;
+    color: var(--accent-teal) !important;
+    border: 1px solid rgba(0, 209, 178, 0.3) !important;
+}
+[data-baseweb="tag"] span { color: var(--accent-teal) !important; }
+
+/* Slider track + thumb */
+.stSlider [data-baseweb="slider"] [role="slider"] {
+    background: var(--accent-teal) !important;
+    border: 2px solid var(--bg-panel) !important;
+    box-shadow: 0 0 0 1px var(--accent-teal) !important;
+}
+[data-testid="stSliderTickBarMin"],
+[data-testid="stSliderTickBarMax"] {
+    color: var(--text-muted) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 10px !important;
 }
 
-/* ─── ALERTS ─── */
+/* Radio */
+.stRadio [role="radiogroup"] label {
+    text-transform: none !important; letter-spacing: 0 !important;
+    font-size: 13px !important;
+    color: var(--text-primary) !important;
+}
+.stRadio [role="radiogroup"] label[data-checked="true"] {
+    color: var(--accent-teal) !important;
+}
+
+/* Checkbox */
+.stCheckbox label {
+    color: var(--text-primary) !important;
+    font-size: 13px !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+
+/* ─── Tabs ─── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0; border-bottom: 1px solid var(--border);
+    padding-bottom: 0; background: transparent;
+}
+.stTabs [data-baseweb="tab"] {
+    color: var(--text-muted); font-weight: 600;
+    font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 12px 20px; background: transparent;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+}
+.stTabs [data-baseweb="tab"]:hover { color: var(--text-primary); }
+.stTabs [aria-selected="true"] {
+    color: var(--accent-teal) !important;
+    border-bottom: 2px solid var(--accent-teal) !important;
+    background: transparent !important;
+}
+
+/* ─── Headings ─── */
+h2, h3, h4 {
+    color: var(--text-primary) !important;
+    letter-spacing: -0.01em; font-weight: 600 !important;
+}
+h2 { font-size: 16px !important; margin-top: 1.4rem !important;
+     padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 14px !important; }
+h4 { font-size: 13px !important; }
+
+/* ─── Dataframes ─── */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    background: var(--bg-panel) !important;
+}
+[data-testid="stDataFrame"] [role="columnheader"] {
+    background: var(--bg-elevated) !important;
+    color: var(--text-muted) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 10px 12px !important;
+}
+[data-testid="stDataFrame"] [role="gridcell"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
+    color: var(--text-primary) !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid rgba(31, 41, 55, 0.5) !important;
+}
+[data-testid="stDataFrame"] [role="row"]:nth-child(even) [role="gridcell"] {
+    background: #0F141C !important;
+}
+[data-testid="stDataFrame"] [role="row"]:nth-child(odd) [role="gridcell"] {
+    background: var(--bg-panel) !important;
+}
+[data-testid="stDataFrame"] [role="row"]:hover [role="gridcell"] {
+    background: var(--bg-elevated) !important;
+}
+
+/* ─── Alerts ─── */
 div[data-testid="stAlert"] {
-    border-radius: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
     border-left-width: 3px;
-    font-size: 0.92rem;
+    font-size: 13px;
+    background: var(--bg-panel);
+}
+div[data-testid="stAlert"] p {
+    color: var(--text-primary) !important;
+    font-size: 13px !important;
+    line-height: 1.6;
 }
 
-/* ─── FOOTER ─── */
-.fintrix-footer {
-    text-align: center; margin-top: 64px; padding: 40px 20px 20px;
-    border-top: 1px solid #1a2235;
-    position: relative;
+/* ─── Progress bar ─── */
+.stProgress > div > div > div > div {
+    background: var(--accent-teal) !important;
 }
-.fintrix-footer::before {
-    content: ''; position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-    width: 120px; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(240, 185, 11, 0.5), transparent);
+
+/* ─── Captions ─── */
+.stCaption, [data-testid="stCaptionContainer"] {
+    color: var(--text-muted) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.02em;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+    transition: background 150ms ease;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-teal); }
+
+/* ─── Footer ─── */
+.fintrix-footer {
+    text-align: center; margin-top: 56px;
+    padding: 32px 20px 16px;
+    border-top: 1px solid var(--border);
 }
 .fintrix-footer .brand {
-    font-size: 1.1rem; font-weight: 900; letter-spacing: 0.24em;
-    text-transform: uppercase;
-    background: linear-gradient(135deg, #ffffff, #f0b90b);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.20em; text-transform: uppercase;
+    color: var(--accent-gold);
+    margin-bottom: 6px;
 }
 .fintrix-footer .tag {
-    color: #5a6578; font-size: 0.68rem; letter-spacing: 0.18em;
-    text-transform: uppercase; font-weight: 600;
+    color: var(--text-muted); font-size: 10px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 500;
 }
 
 /* ─── MOBILE ─── */
 @media (max-width: 768px) {
-    .block-container { padding-left: 0.9rem; padding-right: 0.9rem; padding-top: 1rem; }
-
-    .land-wrap { margin: 40px auto 30px; padding: 0 12px; }
-    .land-title { font-size: 2.6rem !important; letter-spacing: -0.035em; line-height: 1; }
-    .land-tagline { font-size: 1rem !important; }
-    .land-sub { font-size: 0.9rem !important; line-height: 1.6 !important; }
-    .land-eyebrow { font-size: 0.62rem !important; letter-spacing: 0.28em !important;
-        padding: 6px 14px; margin-bottom: 20px; }
-    .land-stats { gap: 10px; margin-top: 32px; }
-    .land-stat { padding: 16px 22px; min-width: 100px; flex: 1; }
-    .land-stat .num { font-size: 1.5rem; }
-    .land-stat .lbl { font-size: 0.62rem; letter-spacing: 0.1em; }
-    .land-features { grid-template-columns: 1fr; margin-top: 32px; gap: 12px; }
+    .block-container { padding-left: 0.85rem; padding-right: 0.85rem;
+                       padding-top: 1rem; }
+    .land-wrap { margin: 40px auto 30px; padding: 0 16px; }
+    .land-title { font-size: 2.2rem !important; letter-spacing: -0.02em; }
+    .land-title::after { margin-top: 14px; width: 44px; }
+    .land-tagline { font-size: 0.9rem !important; margin: 20px 0 10px 0; }
+    .land-sub { font-size: 0.85rem !important; line-height: 1.6 !important; }
+    .land-eyebrow { font-size: 10px !important; margin-bottom: 16px; }
+    .land-stats { margin-top: 32px; max-width: 100%; }
+    .land-stat { padding: 16px 20px; min-width: 100px; }
+    .land-stat .num { font-size: 1.4rem; }
+    .land-stat .lbl { font-size: 9px; }
+    .land-features { grid-template-columns: 1fr; margin-top: 32px; }
     .land-feature { padding: 18px; }
-    .land-feature h4 { font-size: 0.88rem; }
-    .land-feature p { font-size: 0.78rem; }
+    .land-feature h4 { font-size: 0.82rem; }
+    .land-feature p { font-size: 0.76rem; }
 
-    .hero-wrap { padding: 22px 22px !important; border-radius: 14px !important; }
-    .hero-title { font-size: 1.9rem !important; letter-spacing: -0.03em; }
-    .hero-eyebrow { font-size: 0.6rem !important; letter-spacing: 0.26em !important; }
-    .hero-sub { font-size: 0.82rem !important; }
-    .status-pill { font-size: 0.62rem !important; padding: 6px 12px !important;
-        letter-spacing: 0.1em; margin-top: 14px; }
+    .hero-wrap { padding: 18px 20px !important; }
+    .hero-title { font-size: 18px !important; }
+    .hero-eyebrow { font-size: 9px !important; }
+    .hero-sub { font-size: 11px !important; }
+    .status-pill { font-size: 9px !important; padding: 4px 10px !important; }
 
-    .control-card { padding: 18px 18px !important; border-radius: 14px !important; }
-    .control-title { font-size: 0.66rem !important; letter-spacing: 0.16em !important;
-        margin-bottom: 14px !important; }
+    .control-card { padding: 16px 18px !important; }
+    .control-title { font-size: 10px !important; margin-bottom: 14px !important;
+                     padding-bottom: 10px; }
 
-    [data-testid="stMetric"] { padding: 14px 16px !important; border-radius: 12px !important; }
-    [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.58rem !important; letter-spacing: 0.08em !important; }
+    [data-testid="stMetric"] { padding: 12px 14px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.3rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 9px !important; }
 
     .stButton > button {
-        padding: 0.75rem 1rem !important;
-        font-size: 0.82rem !important;
-        min-height: 46px !important;
-    }
-    .stButton > button[kind="primary"] {
-        padding: 0.95rem 1.2rem !important;
-        font-size: 0.86rem !important; letter-spacing: 0.08em !important;
+        padding: 0.7rem 1rem !important;
+        font-size: 11px !important;
+        min-height: 42px !important;
     }
     .stTabs [data-baseweb="tab"] {
-        font-size: 0.68rem !important; padding: 9px 10px !important;
-        letter-spacing: 0.04em !important;
+        font-size: 10px !important;
+        padding: 9px 10px !important;
+        letter-spacing: 0.06em !important;
     }
-    h2 { font-size: 1.1rem !important; }
-    h3 { font-size: 1rem !important; }
-    h4 { font-size: 0.9rem !important; }
+    h2 { font-size: 14px !important; }
+    h3 { font-size: 13px !important; }
+    h4 { font-size: 12px !important; }
 
-    .fintrix-footer { margin-top: 40px; padding-top: 28px; }
-    .fintrix-footer .brand { font-size: 0.9rem; letter-spacing: 0.2em; }
-    .fintrix-footer .tag { font-size: 0.6rem; letter-spacing: 0.14em; }
+    [data-testid="stDataFrame"] [role="gridcell"] { font-size: 11px !important; }
+    .fintrix-footer { margin-top: 40px; padding-top: 24px; }
+    .fintrix-footer .brand { font-size: 10px; letter-spacing: 0.16em; }
+    .fintrix-footer .tag { font-size: 9px; }
 }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────
-# INSTRUMENT UNIVERSES
+# INSTRUMENT UNIVERSES (unchanged)
 # ─────────────────────────────────────────────────────────
 STANDARD_SYMBOLS = [
     "AARTIIND.NS", "ABB.NS", "ABBOTINDIA.NS", "ABCAPITAL.NS", "ABFRL.NS",
@@ -454,7 +597,7 @@ TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
 
 
 # ─────────────────────────────────────────────────────────
-# INDICATOR HELPERS  (UNCHANGED)
+# INDICATOR HELPERS (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def ta_ema(series, length):
     return series.ewm(span=length, adjust=False).mean()
@@ -476,7 +619,7 @@ def ta_stdev_pop(series, length):
 
 
 # ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE  (UNCHANGED)
+# CORE DETECTION ENGINE (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def detect_signals(df):
     if isinstance(df.columns, pd.MultiIndex):
@@ -527,7 +670,7 @@ def detect_signals(df):
 
 
 # ─────────────────────────────────────────────────────────
-# BATCH FETCH  (UNCHANGED)
+# BATCH FETCH (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def batch_fetch(tickers, period="60d", interval="15m"):
     symbols = [f"{t}.NS" if not t.endswith(".NS") else t for t in tickers]
@@ -564,7 +707,7 @@ def batch_fetch(tickers, period="60d", interval="15m"):
 
 
 # ─────────────────────────────────────────────────────────
-# PROCESS BATCH  (UNCHANGED)
+# PROCESS BATCH (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def process_batch(batch_data, timeframes, days_back=10,
                   progress_cb=None, ticker_cb=None):
@@ -684,12 +827,12 @@ def process_batch(batch_data, timeframes, days_back=10,
 def market_status():
     now = datetime.now(pytz.timezone("Asia/Kolkata"))
     if now.weekday() >= 5:
-        return False, "Session Closed"
+        return False, "SESSION CLOSED"
     in_session = (
         (now.hour > 9 or (now.hour == 9 and now.minute >= 15))
         and (now.hour < 15 or (now.hour == 15 and now.minute <= 30))
     )
-    return (True, "Session Live") if in_session else (False, "Session Closed")
+    return (True, "SESSION LIVE") if in_session else (False, "SESSION CLOSED")
 
 def to_csv_bytes(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -700,7 +843,7 @@ def cached_batch(tickers_tuple):
 
 
 # ─────────────────────────────────────────────────────────
-# ADVANCED ANALYTICS
+# ANALYTICS
 # ─────────────────────────────────────────────────────────
 def compute_signal_context(scanned, row):
     sig_dt = row["datetime"]
@@ -768,16 +911,16 @@ def get_current_mtf_state(raw):
             vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
 
             if bool(last["signal_final"]):
-                status, icon = "Active", "🟢"
+                status = "Active"
             elif bool(last["option_bottom_confirmed"]):
-                status, icon = "Exhaustion", "🟡"
+                status = "Exhaustion"
             elif float(last["raw_di_diff"]) < -10:
-                status, icon = "Bias Only", "🔵"
+                status = "Bias Only"
             else:
-                status, icon = "Quiet", "⚪"
+                status = "Quiet"
 
             result[tf_name] = {
-                "status": status, "icon": icon,
+                "status": status,
                 "signal": bool(last["signal_final"]),
                 "bias": float(last["raw_di_diff"]),
                 "dev": float(last["distance_pct"]),
@@ -802,53 +945,44 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
     fig.add_trace(go.Candlestick(
         x=win.index, open=win["open"], high=win["high"],
         low=win["low"], close=win["close"], name="Price",
-        increasing_line_color="#00e676", decreasing_line_color="#ff3d5a",
-        increasing_fillcolor="rgba(0,230,118,0.25)",
-        decreasing_fillcolor="rgba(255,61,90,0.25)",
+        increasing_line_color=CANDLE_UP, decreasing_line_color=CANDLE_DOWN,
+        increasing_fillcolor="rgba(34,197,94,0.35)",
+        decreasing_fillcolor="rgba(239,68,68,0.35)",
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         x=win.index, y=win["ema_value"], name="Baseline",
-        line=dict(color="#f0b90b", width=1.8), opacity=0.9,
+        line=dict(color=EMA_PRIMARY, width=1.5), opacity=0.9,
         hovertemplate="Baseline: %{y:.2f}<extra></extra>",
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         x=[sig_dt], y=[float(ctx["bar"]["close"])],
-        mode="markers+text",
-        marker=dict(symbol="star", size=22, color="#f0b90b",
-                    line=dict(color="#ffffff", width=2)),
-        text=["SIGNAL"], textposition="top center",
-        textfont=dict(color="#f0b90b", size=11, family="Inter"),
+        mode="markers",
+        marker=dict(symbol="diamond", size=14, color=SIGNAL_MARKER,
+                    line=dict(color="#E5E7EB", width=1.5)),
         name="Signal", hoverinfo="skip", showlegend=False,
     ), row=1, col=1)
 
-    colors = ["#00e676" if c >= o else "#ff3d5a"
+    colors = [CANDLE_UP if c >= o else CANDLE_DOWN
               for o, c in zip(win["open"], win["close"])]
     fig.add_trace(go.Bar(
         x=win.index, y=win["volume"], name="Volume",
-        marker_color=colors, marker_line_width=0, opacity=0.7,
+        marker_color=colors, marker_line_width=0, opacity=0.65,
     ), row=2, col=1)
 
-    fig.update_layout(
-        height=560, template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(10, 15, 28, 0.7)",
-        font=dict(family="Inter", color="#eef2f8", size=11),
-        margin=dict(l=10, r=10, t=20, b=10),
-        showlegend=False, hovermode="x unified", dragmode="pan",
-    )
-    fig.update_xaxes(rangeslider_visible=False, gridcolor="#1a2235")
-    fig.update_yaxes(gridcolor="#1a2235", title_text="Price", row=1, col=1)
-    fig.update_yaxes(gridcolor="#1a2235", title_text="Volume", row=2, col=1)
+    fig.update_layout(height=520, **PLOTLY_LAYOUT)
+    fig.update_xaxes(rangeslider_visible=False)
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
     return fig
 
 
 def build_signal_timeline(ticker_df):
     fig = go.Figure()
     level_colors = {
-        "15m": "#00d4ff", "30m": "#00e676",
-        "45m": "#f0b90b", "60m": "#ff7ab3",
+        "15m": "#00D1B2", "30m": "#22C55E",
+        "45m": "#C9A227", "60m": "#9CA3AF",
     }
     for tf in LEVEL_ORDER:
         sub = ticker_df[ticker_df["timeframe"] == tf]
@@ -857,21 +991,13 @@ def build_signal_timeline(ticker_df):
         fig.add_trace(go.Scatter(
             x=sub["datetime"], y=[LEVEL_LABEL[tf]] * len(sub),
             mode="markers",
-            marker=dict(size=14, color=level_colors[tf],
-                        line=dict(color="#ffffff", width=1)),
+            marker=dict(size=11, color=level_colors[tf],
+                        line=dict(color="#0B0F14", width=1)),
             name=LEVEL_LABEL[tf],
             hovertemplate=f"{LEVEL_LABEL[tf]}<br>%{{x|%d %b %H:%M}}<extra></extra>",
         ))
-    fig.update_layout(
-        height=170, template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(10, 15, 28, 0.7)",
-        margin=dict(l=80, r=10, t=10, b=10),
-        showlegend=False, font=dict(family="Inter", color="#eef2f8", size=11),
-    )
-    fig.update_xaxes(gridcolor="#1a2235")
-    fig.update_yaxes(gridcolor="#1a2235",
-                     categoryorder="array",
+    fig.update_layout(height=160, **PLOTLY_LAYOUT)
+    fig.update_yaxes(categoryorder="array",
                      categoryarray=[LEVEL_LABEL[t] for t in reversed(LEVEL_ORDER)])
     return fig
 
@@ -885,13 +1011,13 @@ def generate_narrative(row, ctx, mtf):
     n_aligned = len(aligned)
 
     if n_aligned >= 3:
-        conviction = "**high conviction** — broad multi-level alignment"
+        conviction = "high conviction — broad multi-level alignment"
     elif n_aligned == 2:
-        conviction = "**moderate conviction** — partial level agreement"
+        conviction = "moderate conviction — partial level agreement"
     elif n_aligned == 1:
-        conviction = "**single-level signal** — confirmation pending"
+        conviction = "single-level signal — confirmation pending"
     else:
-        conviction = "**historical signal** — current state has cooled"
+        conviction = "historical signal — current state has cooled"
 
     aligned_labels = [LEVEL_LABEL[k] for k in aligned]
 
@@ -918,12 +1044,12 @@ def generate_narrative(row, ctx, mtf):
 
 
 # ─────────────────────────────────────────────────────────
-# LANDING SCREEN — Fintrix Analytics as the hero
+# LANDING SCREEN
 # ─────────────────────────────────────────────────────────
 if not st.session_state.get("entered"):
     st.markdown(f"""
     <div class="land-wrap">
-        <div class="land-eyebrow">◆ SIGNAL INTELLIGENCE PLATFORM</div>
+        <div class="land-eyebrow">{BRAND_TAG}</div>
         <h1 class="land-title">{BRAND_NAME}</h1>
         <p class="land-tagline">Institutional-Grade Signal Discovery</p>
         <p class="land-sub">
@@ -931,8 +1057,8 @@ if not st.session_state.get("entered"):
             exhaustion patterns across four intraday analysis horizons.
         </p>
         <div class="land-stats">
-            <div class="land-stat"><div class="num">4</div><div class="lbl">Levels</div></div>
-            <div class="land-stat"><div class="num">2</div><div class="lbl">Stage Filters</div></div>
+            <div class="land-stat"><div class="num">04</div><div class="lbl">Levels</div></div>
+            <div class="land-stat"><div class="num">02</div><div class="lbl">Stage Filters</div></div>
             <div class="land-stat"><div class="num">250+</div><div class="lbl">Instruments</div></div>
         </div>
         <div class="land-features">
@@ -957,14 +1083,14 @@ if not st.session_state.get("entered"):
 
     _, c, _ = st.columns([1, 1, 1])
     with c:
-        if st.button("◆  Enter Platform", use_container_width=True, type="primary"):
+        if st.button("ENTER PLATFORM", use_container_width=True, type="primary"):
             st.session_state.entered = True
             st.rerun()
     st.stop()
 
 
 # ─────────────────────────────────────────────────────────
-# HERO HEADER — Fintrix Analytics as the dominant title
+# HERO
 # ─────────────────────────────────────────────────────────
 live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
@@ -972,9 +1098,9 @@ dot_cls  = "dot-live" if live else "dot-closed"
 
 st.markdown(f"""
 <div class="hero-wrap">
-    <div class="hero-eyebrow">◆ SIGNAL INTELLIGENCE PLATFORM</div>
+    <div class="hero-eyebrow">{BRAND_TAG}</div>
     <div class="hero-title">{BRAND_NAME}</div>
-    <p class="hero-sub">Multi-level confluence engine · 4 analysis horizons</p>
+    <p class="hero-sub">Multi-level confluence engine · Four intraday analysis horizons</p>
     <div class="status-pill {pill_cls}">
         <span class="dot {dot_cls}"></span> {status_label}
     </div>
@@ -986,7 +1112,7 @@ st.markdown(f"""
 # CONTROL PANEL
 # ─────────────────────────────────────────────────────────
 st.markdown('<div class="control-card">', unsafe_allow_html=True)
-st.markdown('<div class="control-title">⚙ SCAN CONFIGURATION</div>', unsafe_allow_html=True)
+st.markdown('<div class="control-title">Scan Configuration</div>', unsafe_allow_html=True)
 
 rc1, rc2 = st.columns([2, 1])
 with rc1:
@@ -1010,12 +1136,12 @@ tickers = base[:max_tickers]
 
 rc3, rc4 = st.columns([3, 2])
 with rc3:
-    st.markdown("**Analysis Levels**")
+    st.markdown('<div class="section-label">Analysis Levels</div>', unsafe_allow_html=True)
     lvl_cols = st.columns(4)
-    lvl_1 = lvl_cols[0].checkbox("Level 1", value=True, help="Shortest horizon")
-    lvl_2 = lvl_cols[1].checkbox("Level 2", value=True, help="Short horizon")
-    lvl_3 = lvl_cols[2].checkbox("Level 3", value=True, help="Medium horizon")
-    lvl_4 = lvl_cols[3].checkbox("Level 4", value=True, help="Long horizon")
+    lvl_1 = lvl_cols[0].checkbox("Level 1", value=True)
+    lvl_2 = lvl_cols[1].checkbox("Level 2", value=True)
+    lvl_3 = lvl_cols[2].checkbox("Level 3", value=True)
+    lvl_4 = lvl_cols[3].checkbox("Level 4", value=True)
     selected_tfs = [tf for tf, on in
                     [("15m", lvl_1), ("30m", lvl_2),
                      ("45m", lvl_3), ("60m", lvl_4)] if on]
@@ -1025,17 +1151,17 @@ with rc4:
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 b1, b2, b3, b4 = st.columns([2, 1, 1, 1])
 with b1:
-    run_btn = st.button("▶  RUN SCAN", use_container_width=True, type="primary")
+    run_btn = st.button("RUN SCAN", use_container_width=True, type="primary")
 with b2:
-    refresh_btn = st.button("🔄  Refresh", use_container_width=True)
+    refresh_btn = st.button("Refresh", use_container_width=True)
 with b3:
-    clear_btn = st.button("🗑  Clear", use_container_width=True)
+    clear_btn = st.button("Clear", use_container_width=True)
 with b4:
     if st.session_state.get("scan_out"):
         df_now = st.session_state.scan_out["results_df"]
         if not df_now.empty:
             st.download_button(
-                "⬇  Export", data=to_csv_bytes(df_now),
+                "Export", data=to_csv_bytes(df_now),
                 file_name=f"signals_{datetime.now():%Y%m%d_%H%M}.csv",
                 mime="text/csv", use_container_width=True,
             )
@@ -1067,7 +1193,7 @@ if run_btn:
         st.stop()
 
     fetch_slot = st.empty()
-    fetch_slot.info(f"📡 Fetching data for {len(tickers)} instruments…")
+    fetch_slot.info(f"Fetching data for {len(tickers)} instruments…")
     batch_data, fetch_err = cached_batch(tuple(tickers))
 
     if fetch_err:
@@ -1076,27 +1202,26 @@ if run_btn:
         st.stop()
     if not batch_data:
         fetch_slot.empty()
-        st.error("No data returned. Try **Refresh** and scan again.")
+        st.error("No data returned. Try Refresh and scan again.")
         st.stop()
 
-    fetch_slot.success(f"✅  {len(batch_data)}/{len(tickers)} instruments loaded. Processing…")
-
+    fetch_slot.success(f"{len(batch_data)}/{len(tickers)} instruments loaded. Processing…")
     progress = st.progress(0.0, text="Detecting signals…")
-    status = st.empty()
+    status_slot = st.empty()
 
     def _prog(p):
         progress.progress(min(p, 1.0), text=f"Scanning… {int(p*100)}%")
 
     def _tick(name, n):
         if n > 0:
-            status.success(f"🎯  **{name}** — {n} qualified")
+            status_slot.success(f"{name} — {n} qualified")
         else:
-            status.info(f"🔍  {name}")
+            status_slot.info(f"{name}")
 
     out = process_batch(batch_data, selected_tfs, days_back=days_back,
                         progress_cb=_prog, ticker_cb=_tick)
     progress.empty()
-    status.empty()
+    status_slot.empty()
     fetch_slot.empty()
 
     st.session_state.scan_out = out
@@ -1106,7 +1231,7 @@ if run_btn:
         "days_back": days_back,
     }
     st.success(
-        f"✅  Scan complete — **{len(out['results_df'])} signal(s)** "
+        f"Scan complete — {len(out['results_df'])} signal(s) "
         f"across {len(batch_data)} instruments in {out['scan_time_s']}s."
     )
 
@@ -1117,7 +1242,7 @@ if run_btn:
 out = st.session_state.scan_out
 
 if out is None:
-    st.info("👆  Configure the scan above, then click **▶ RUN SCAN**.")
+    st.info("Configure the scan above, then click RUN SCAN.")
     st.stop()
 
 df   = out["results_df"]
@@ -1134,7 +1259,7 @@ k3.metric("Scan Duration", f"{out['scan_time_s']}s")
 k4.metric("Active Levels", levels_str)
 
 tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
-    ["🎯 Signals", "📈 Chart", "📊 Analytics", "⚠ Notes"]
+    ["SIGNALS", "CHART", "ANALYTICS", "NOTES"]
 )
 
 
@@ -1159,7 +1284,7 @@ with tab_sig:
             )
         with f3:
             min_bias = st.slider(
-                "Max Bias threshold",
+                "Max Bias Threshold",
                 float(df["raw_di_diff"].min()), 0.0, 0.0,
             )
 
@@ -1181,13 +1306,14 @@ with tab_sig:
                      "Last Price", "Deviation", "Bias"]
         disp = disp[cols_show]
 
-        top3_set = set(range(min(3, len(disp))))
+        top3 = set(range(min(3, len(disp))))
 
         def _style_row(row):
-            if row.name in top3_set:
-                return (['background-color: rgba(0, 230, 118, 0.12); '
-                         'color: #00e676; font-weight: 600'] * len(row))
-            return [''] * len(row)
+            styles = [''] * len(row)
+            if row.name in top3:
+                styles = ['background-color: rgba(34, 197, 94, 0.10); '
+                          'color: #22C55E; font-weight: 600'] * len(row)
+            return styles
 
         styled = disp.style.apply(_style_row, axis=1)
 
@@ -1197,16 +1323,16 @@ with tab_sig:
             hide_index=True,
             column_config={
                 "Rank": st.column_config.NumberColumn("#", width="small"),
-                "Timestamp": st.column_config.TextColumn("🕐 Timestamp", width="medium"),
-                "Instrument": st.column_config.TextColumn("📊 Instrument", width="small"),
-                "Level": st.column_config.TextColumn("◈ Level", width="small"),
+                "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
+                "Instrument": st.column_config.TextColumn("Instrument", width="small"),
+                "Level": st.column_config.TextColumn("Level", width="small"),
                 "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
                 "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
                 "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
             },
         )
 
-        st.caption("🟢 Green rows mark the 3 most recent signals.")
+        st.caption("Highlighted rows mark the three most recent signals.")
 
 
 # ─── TAB 2: CHART ───────────────────────────────────────
@@ -1219,7 +1345,7 @@ with tab_chart:
                       f"{r['datetime']:%d %b %Y %H:%M}",
             axis=1,
         ).tolist()
-        pick = st.selectbox("Select a signal to analyse", labels, key="chart_pick")
+        pick = st.selectbox("Select a signal", labels, key="chart_pick")
         idx = labels.index(pick)
         row = df.iloc[idx]
 
@@ -1276,16 +1402,36 @@ with tab_chart:
                 else:
                     mtf_rows.append({
                         "Level": LEVEL_LABEL[tf_name],
-                        "Status": f"{state['icon']}  {state['status']}",
+                        "Status": state["status"],
                         "Bias": round(state["bias"], 2),
                         "Deviation": round(state["dev"], 2),
                         "Quant Score": round(state["vol_score"], 0),
                     })
+            mtf_df = pd.DataFrame(mtf_rows)
+
+            def _style_status(val):
+                v = str(val)
+                if v == "Active":
+                    return ("background-color: rgba(34,197,94,0.12); "
+                            "color: #22C55E; font-weight: 600; "
+                            "border-radius: 4px;")
+                if v == "Exhaustion":
+                    return ("background-color: rgba(245,158,11,0.12); "
+                            "color: #F59E0B; font-weight: 600;")
+                if v == "Bias Only":
+                    return ("background-color: rgba(0,209,178,0.10); "
+                            "color: #00D1B2; font-weight: 600;")
+                if v == "Quiet":
+                    return "color: #9CA3AF;"
+                return ""
+
+            styled_mtf = mtf_df.style.map(_style_status, subset=["Status"])
+
             st.dataframe(
-                pd.DataFrame(mtf_rows),
+                styled_mtf,
                 use_container_width=True, hide_index=True,
                 column_config={
-                    "Level": st.column_config.TextColumn("◈ Level", width="small"),
+                    "Level": st.column_config.TextColumn("Level", width="small"),
                     "Status": st.column_config.TextColumn("Status", width="medium"),
                     "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
                     "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
@@ -1364,11 +1510,11 @@ with tab_err:
 
 
 # ─────────────────────────────────────────────────────────
-# FOOTER — Fintrix Analytics
+# FOOTER
 # ─────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="fintrix-footer">
     <div class="brand">{BRAND_NAME}</div>
-    <div class="tag">SIGNAL INTELLIGENCE PLATFORM</div>
+    <div class="tag">{BRAND_TAG}</div>
 </div>
 """, unsafe_allow_html=True)
