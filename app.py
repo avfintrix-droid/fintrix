@@ -10,12 +10,60 @@ import pytz
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from plotly_template import (
-    PLOTLY_LAYOUT, CANDLE_UP, CANDLE_DOWN,
-    EMA_PRIMARY, EMA_SECONDARY, SIGNAL_MARKER,
-)
-
 warnings.filterwarnings("ignore")
+
+# ─────────────────────────────────────────────────────────
+# PLOTLY TEMPLATE (inlined — no external file)
+# ─────────────────────────────────────────────────────────
+PLOTLY_LAYOUT = {
+    "paper_bgcolor": "rgba(0,0,0,0)",
+    "plot_bgcolor": "#0B0F14",
+    "font": {
+        "family": "Inter, -apple-system, sans-serif",
+        "color": "#E5E7EB",
+        "size": 11,
+    },
+    "xaxis": {
+        "gridcolor": "#1F2937",
+        "gridwidth": 0.5,
+        "linecolor": "#1F2937",
+        "zeroline": False,
+        "tickfont": {"family": "JetBrains Mono, monospace",
+                     "color": "#9CA3AF", "size": 10},
+        "showspikes": False,
+    },
+    "yaxis": {
+        "gridcolor": "#1F2937",
+        "gridwidth": 0.5,
+        "linecolor": "#1F2937",
+        "zeroline": False,
+        "tickfont": {"family": "JetBrains Mono, monospace",
+                     "color": "#9CA3AF", "size": 10},
+        "showspikes": False,
+    },
+    "hoverlabel": {
+        "bgcolor": "#172030",
+        "bordercolor": "#1F2937",
+        "font": {"family": "JetBrains Mono, monospace",
+                 "color": "#E5E7EB", "size": 11},
+    },
+    "legend": {
+        "bgcolor": "rgba(0,0,0,0)",
+        "bordercolor": "#1F2937",
+        "font": {"family": "Inter, sans-serif",
+                 "color": "#9CA3AF", "size": 10},
+    },
+    "margin": {"l": 10, "r": 10, "t": 20, "b": 10},
+    "showlegend": False,
+    "hovermode": "x unified",
+    "dragmode": "pan",
+}
+
+CANDLE_UP = "#22C55E"
+CANDLE_DOWN = "#EF4444"
+EMA_PRIMARY = "#00D1B2"
+EMA_SECONDARY = "#C9A227"
+SIGNAL_MARKER = "#C9A227"
 
 # ─────────────────────────────────────────────────────────
 # BRANDING + LEVEL MAPPING
@@ -25,19 +73,6 @@ BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
 
 LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
-
-# Palette (referenced inline where Streamlit needs literal values)
-CLR_BG = "#0B0F14"
-CLR_PANEL = "#121821"
-CLR_ELEVATED = "#172030"
-CLR_BORDER = "#1F2937"
-CLR_TEAL = "#00D1B2"
-CLR_GOLD = "#C9A227"
-CLR_BULL = "#22C55E"
-CLR_BEAR = "#EF4444"
-CLR_WARN = "#F59E0B"
-CLR_TEXT = "#E5E7EB"
-CLR_MUTED = "#9CA3AF"
 
 # ─────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -68,7 +103,6 @@ st.markdown("""
     --warning:      #F59E0B;
     --text-primary: #E5E7EB;
     --text-muted:   #9CA3AF;
-    --zebra-dark:   #0F141C;
 }
 
 html, body, [class*="css"] {
@@ -82,14 +116,14 @@ html, body, [class*="css"] {
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px; }
 
-/* ─── Section labels ─── */
+/* Section labels */
 .section-label {
     font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--text-muted);
     margin-bottom: 12px;
 }
 
-/* ─── Landing page ─── */
+/* Landing page */
 .land-wrap {
     max-width: 900px; margin: 80px auto 60px;
     text-align: center; padding: 0 24px;
@@ -119,10 +153,10 @@ html, body, [class*="css"] {
 }
 .land-stats {
     display: flex; gap: 1px; justify-content: center;
-    margin: 48px 0 0; flex-wrap: wrap;
+    margin: 48px auto 0; flex-wrap: wrap;
     border: 1px solid var(--border); border-radius: 8px;
     overflow: hidden; background: var(--border);
-    max-width: 560px; margin-left: auto; margin-right: auto;
+    max-width: 560px;
 }
 .land-stat {
     background: var(--bg-panel); padding: 20px 40px; flex: 1;
@@ -148,22 +182,19 @@ html, body, [class*="css"] {
 }
 .land-feature h4 {
     color: var(--text-primary); font-size: 0.88rem;
-    margin: 0 0 8px 0; font-weight: 600; letter-spacing: 0.01em;
+    margin: 0 0 8px 0; font-weight: 600;
 }
 .land-feature p {
     color: var(--text-muted); font-size: 0.82rem;
     margin: 0; line-height: 1.6;
 }
 
-/* ─── Hero header ─── */
+/* Hero header */
 .hero-wrap {
     background: linear-gradient(180deg, #121821 0%, #0E131A 100%);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px 28px;
-    margin-bottom: 20px;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 24px 28px; margin-bottom: 20px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-    position: relative;
 }
 .hero-eyebrow {
     font-size: 10px; font-weight: 600; letter-spacing: 0.16em;
@@ -202,7 +233,7 @@ html, body, [class*="css"] {
 .dot-live { background: var(--bullish); box-shadow: 0 0 6px var(--bullish); }
 .dot-closed { background: var(--warning); }
 
-/* ─── Control panel ─── */
+/* Control panel */
 .control-card {
     background: var(--bg-panel);
     border: 1px solid var(--border); border-radius: 8px;
@@ -216,7 +247,7 @@ html, body, [class*="css"] {
     border-bottom: 1px solid var(--border);
 }
 
-/* ─── Metric cards ─── */
+/* Metric cards */
 [data-testid="stMetric"] {
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -241,26 +272,21 @@ html, body, [class*="css"] {
     font-family: 'JetBrains Mono', monospace !important;
     font-weight: 600 !important;
     font-size: 1.6rem !important;
-    letter-spacing: -0.01em;
 }
 [data-testid="stMetricDelta"] {
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 11px !important; font-weight: 500 !important;
 }
 
-/* ─── Buttons ─── */
+/* Buttons */
 .stButton > button {
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    border-radius: 6px; font-weight: 600; font-size: 12px;
+    letter-spacing: 0.06em; text-transform: uppercase;
     padding: 0.65rem 1.2rem;
     transition: all 150ms ease;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text-primary) !important;
-    height: auto;
 }
 .stButton > button:hover {
     border-color: var(--accent-teal);
@@ -286,14 +312,13 @@ html, body, [class*="css"] {
     background: transparent;
     color: var(--accent-teal) !important;
     border: 1px solid var(--accent-teal);
-    transition: all 150ms ease;
 }
 .stDownloadButton > button:hover {
     background: rgba(0, 209, 178, 0.08);
     box-shadow: 0 0 16px rgba(0, 209, 178, 0.2);
 }
 
-/* ─── Inputs & selects ─── */
+/* Inputs */
 .stSelectbox label, .stMultiSelect label,
 .stSlider label, .stRadio label, .stTextInput label {
     color: var(--text-muted) !important;
@@ -308,9 +333,6 @@ html, body, [class*="css"] {
     border-radius: 6px !important;
     color: var(--text-primary) !important;
 }
-[data-baseweb="select"] > div:hover {
-    border-color: rgba(0, 209, 178, 0.4) !important;
-}
 [data-baseweb="select"] > div:focus-within {
     border-color: var(--accent-teal) !important;
     box-shadow: 0 0 0 2px rgba(0, 209, 178, 0.15) !important;
@@ -321,21 +343,11 @@ html, body, [class*="css"] {
     border: 1px solid rgba(0, 209, 178, 0.3) !important;
 }
 [data-baseweb="tag"] span { color: var(--accent-teal) !important; }
-
-/* Slider track + thumb */
 .stSlider [data-baseweb="slider"] [role="slider"] {
     background: var(--accent-teal) !important;
     border: 2px solid var(--bg-panel) !important;
     box-shadow: 0 0 0 1px var(--accent-teal) !important;
 }
-[data-testid="stSliderTickBarMin"],
-[data-testid="stSliderTickBarMax"] {
-    color: var(--text-muted) !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 10px !important;
-}
-
-/* Radio */
 .stRadio [role="radiogroup"] label {
     text-transform: none !important; letter-spacing: 0 !important;
     font-size: 13px !important;
@@ -344,8 +356,6 @@ html, body, [class*="css"] {
 .stRadio [role="radiogroup"] label[data-checked="true"] {
     color: var(--accent-teal) !important;
 }
-
-/* Checkbox */
 .stCheckbox label {
     color: var(--text-primary) !important;
     font-size: 13px !important;
@@ -353,16 +363,16 @@ html, body, [class*="css"] {
     letter-spacing: 0 !important;
 }
 
-/* ─── Tabs ─── */
+/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
     gap: 0; border-bottom: 1px solid var(--border);
-    padding-bottom: 0; background: transparent;
+    padding-bottom: 0;
 }
 .stTabs [data-baseweb="tab"] {
     color: var(--text-muted); font-weight: 600;
     font-size: 11px; letter-spacing: 0.08em;
     text-transform: uppercase;
-    padding: 12px 20px; background: transparent;
+    padding: 12px 20px;
     border-bottom: 2px solid transparent;
     transition: color 150ms ease, border-color 150ms ease;
 }
@@ -373,7 +383,7 @@ html, body, [class*="css"] {
     background: transparent !important;
 }
 
-/* ─── Headings ─── */
+/* Headings */
 h2, h3, h4 {
     color: var(--text-primary) !important;
     letter-spacing: -0.01em; font-weight: 600 !important;
@@ -383,7 +393,7 @@ h2 { font-size: 16px !important; margin-top: 1.4rem !important;
 h3 { font-size: 14px !important; }
 h4 { font-size: 13px !important; }
 
-/* ─── Dataframes ─── */
+/* Dataframes */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
@@ -417,12 +427,11 @@ h4 { font-size: 13px !important; }
     background: var(--bg-elevated) !important;
 }
 
-/* ─── Alerts ─── */
+/* Alerts */
 div[data-testid="stAlert"] {
     border-radius: 6px;
     border: 1px solid var(--border);
     border-left-width: 3px;
-    font-size: 13px;
     background: var(--bg-panel);
 }
 div[data-testid="stAlert"] p {
@@ -431,29 +440,27 @@ div[data-testid="stAlert"] p {
     line-height: 1.6;
 }
 
-/* ─── Progress bar ─── */
+/* Progress */
 .stProgress > div > div > div > div {
     background: var(--accent-teal) !important;
 }
 
-/* ─── Captions ─── */
+/* Captions */
 .stCaption, [data-testid="stCaptionContainer"] {
     color: var(--text-muted) !important;
     font-size: 11px !important;
-    letter-spacing: 0.02em;
 }
 
-/* ─── Scrollbar ─── */
+/* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-app); }
 ::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 4px;
+    background: #334155; border-radius: 4px;
     transition: background 150ms ease;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-teal); }
 
-/* ─── Footer ─── */
+/* Footer */
 .fintrix-footer {
     text-align: center; margin-top: 56px;
     padding: 32px 20px 16px;
@@ -462,8 +469,7 @@ div[data-testid="stAlert"] p {
 .fintrix-footer .brand {
     font-size: 12px; font-weight: 700;
     letter-spacing: 0.20em; text-transform: uppercase;
-    color: var(--accent-gold);
-    margin-bottom: 6px;
+    color: var(--accent-gold); margin-bottom: 6px;
 }
 .fintrix-footer .tag {
     color: var(--text-muted); font-size: 10px;
@@ -471,12 +477,11 @@ div[data-testid="stAlert"] p {
     font-weight: 500;
 }
 
-/* ─── MOBILE ─── */
+/* MOBILE */
 @media (max-width: 768px) {
-    .block-container { padding-left: 0.85rem; padding-right: 0.85rem;
-                       padding-top: 1rem; }
+    .block-container { padding-left: 0.85rem; padding-right: 0.85rem; padding-top: 1rem; }
     .land-wrap { margin: 40px auto 30px; padding: 0 16px; }
-    .land-title { font-size: 2.2rem !important; letter-spacing: -0.02em; }
+    .land-title { font-size: 2.2rem !important; }
     .land-title::after { margin-top: 14px; width: 44px; }
     .land-tagline { font-size: 0.9rem !important; margin: 20px 0 10px 0; }
     .land-sub { font-size: 0.85rem !important; line-height: 1.6 !important; }
@@ -487,37 +492,22 @@ div[data-testid="stAlert"] p {
     .land-stat .lbl { font-size: 9px; }
     .land-features { grid-template-columns: 1fr; margin-top: 32px; }
     .land-feature { padding: 18px; }
-    .land-feature h4 { font-size: 0.82rem; }
-    .land-feature p { font-size: 0.76rem; }
-
     .hero-wrap { padding: 18px 20px !important; }
     .hero-title { font-size: 18px !important; }
     .hero-eyebrow { font-size: 9px !important; }
     .hero-sub { font-size: 11px !important; }
     .status-pill { font-size: 9px !important; padding: 4px 10px !important; }
-
     .control-card { padding: 16px 18px !important; }
-    .control-title { font-size: 10px !important; margin-bottom: 14px !important;
-                     padding-bottom: 10px; }
-
+    .control-title { font-size: 10px !important; margin-bottom: 14px !important; }
     [data-testid="stMetric"] { padding: 12px 14px !important; }
     [data-testid="stMetricValue"] { font-size: 1.3rem !important; }
     [data-testid="stMetricLabel"] { font-size: 9px !important; }
-
-    .stButton > button {
-        padding: 0.7rem 1rem !important;
-        font-size: 11px !important;
-        min-height: 42px !important;
-    }
-    .stTabs [data-baseweb="tab"] {
-        font-size: 10px !important;
-        padding: 9px 10px !important;
-        letter-spacing: 0.06em !important;
-    }
+    .stButton > button { padding: 0.7rem 1rem !important; font-size: 11px !important;
+                         min-height: 42px !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 10px !important; padding: 9px 10px !important; }
     h2 { font-size: 14px !important; }
     h3 { font-size: 13px !important; }
     h4 { font-size: 12px !important; }
-
     [data-testid="stDataFrame"] [role="gridcell"] { font-size: 11px !important; }
     .fintrix-footer { margin-top: 40px; padding-top: 24px; }
     .fintrix-footer .brand { font-size: 10px; letter-spacing: 0.16em; }
@@ -528,7 +518,7 @@ div[data-testid="stAlert"] p {
 
 
 # ─────────────────────────────────────────────────────────
-# INSTRUMENT UNIVERSES (unchanged)
+# INSTRUMENT UNIVERSES
 # ─────────────────────────────────────────────────────────
 STANDARD_SYMBOLS = [
     "AARTIIND.NS", "ABB.NS", "ABBOTINDIA.NS", "ABCAPITAL.NS", "ABFRL.NS",
@@ -597,7 +587,7 @@ TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
 
 
 # ─────────────────────────────────────────────────────────
-# INDICATOR HELPERS (UNCHANGED)
+# INDICATOR HELPERS
 # ─────────────────────────────────────────────────────────
 def ta_ema(series, length):
     return series.ewm(span=length, adjust=False).mean()
@@ -619,7 +609,7 @@ def ta_stdev_pop(series, length):
 
 
 # ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE (UNCHANGED)
+# CORE DETECTION ENGINE
 # ─────────────────────────────────────────────────────────
 def detect_signals(df):
     if isinstance(df.columns, pd.MultiIndex):
@@ -670,7 +660,7 @@ def detect_signals(df):
 
 
 # ─────────────────────────────────────────────────────────
-# BATCH FETCH (UNCHANGED)
+# BATCH FETCH
 # ─────────────────────────────────────────────────────────
 def batch_fetch(tickers, period="60d", interval="15m"):
     symbols = [f"{t}.NS" if not t.endswith(".NS") else t for t in tickers]
@@ -707,7 +697,7 @@ def batch_fetch(tickers, period="60d", interval="15m"):
 
 
 # ─────────────────────────────────────────────────────────
-# PROCESS BATCH (UNCHANGED)
+# PROCESS BATCH
 # ─────────────────────────────────────────────────────────
 def process_batch(batch_data, timeframes, days_back=10,
                   progress_cb=None, ticker_cb=None):
@@ -1412,15 +1402,11 @@ with tab_chart:
             def _style_status(val):
                 v = str(val)
                 if v == "Active":
-                    return ("background-color: rgba(34,197,94,0.12); "
-                            "color: #22C55E; font-weight: 600; "
-                            "border-radius: 4px;")
+                    return "background-color: rgba(34,197,94,0.12); color: #22C55E; font-weight: 600;"
                 if v == "Exhaustion":
-                    return ("background-color: rgba(245,158,11,0.12); "
-                            "color: #F59E0B; font-weight: 600;")
+                    return "background-color: rgba(245,158,11,0.12); color: #F59E0B; font-weight: 600;"
                 if v == "Bias Only":
-                    return ("background-color: rgba(0,209,178,0.10); "
-                            "color: #00D1B2; font-weight: 600;")
+                    return "background-color: rgba(0,209,178,0.10); color: #00D1B2; font-weight: 600;"
                 if v == "Quiet":
                     return "color: #9CA3AF;"
                 return ""
