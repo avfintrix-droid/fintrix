@@ -17,7 +17,6 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────
 BRAND_NAME = "Fintrix Analytics"
 
-# Internal timeframe keys → client-facing level labels
 LEVEL_LABEL = {
     "15m": "Level 1",
     "30m": "Level 2",
@@ -30,150 +29,356 @@ LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title=f"{BRAND_NAME} · Signal Detection Suite",
-    page_icon="◈",
+    page_title=f"{BRAND_NAME} · Signal Intelligence",
+    page_icon="◆",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────
-# GLOBAL CSS  (desktop + mobile media queries)
+# PREMIUM GLOBAL CSS
 # ─────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.stApp { background: radial-gradient(circle at 20% 0%, #0f1a2e 0%, #0a0e1a 40%, #060910 100%); }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── PREMIUM OBSIDIAN BACKGROUND ─── */
+.stApp {
+    background:
+        radial-gradient(ellipse at 15% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 100%, rgba(240, 185, 11, 0.04) 0%, transparent 50%),
+        linear-gradient(180deg, #0a0f1c 0%, #06080f 50%, #04060b 100%);
+    min-height: 100vh;
+}
+
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1500px; }
+.block-container { padding-top: 2rem; padding-bottom: 4rem; max-width: 1500px; }
 
-.land-wrap { max-width: 900px; margin: 80px auto; text-align: center; }
-.land-eyebrow { font-size: 0.72rem; letter-spacing: 0.32em; color: #00d4ff;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 16px; }
-.land-title { font-size: 3.4rem; font-weight: 900;
-    background: linear-gradient(90deg, #ffffff, #a8e6ff, #00d4ff);
+/* ─── LANDING ─── */
+.land-wrap { max-width: 960px; margin: 90px auto 60px; text-align: center; padding: 0 24px; }
+.land-eyebrow {
+    font-size: 0.78rem; letter-spacing: 0.42em; color: #f0b90b;
+    font-weight: 800; text-transform: uppercase; margin-bottom: 28px;
+    display: inline-block; padding: 8px 20px;
+    border: 1px solid rgba(240, 185, 11, 0.3);
+    border-radius: 999px; background: rgba(240, 185, 11, 0.06);
+}
+.land-title {
+    font-size: 5.4rem; font-weight: 900; line-height: 0.95;
+    background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 40%, #f0b90b 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    margin: 0 0 20px 0; letter-spacing: -0.035em; line-height: 1.05; }
-.land-sub { color: #8892a6; font-size: 1.12rem; line-height: 1.75;
-    margin-bottom: 6px; max-width: 640px; margin-left: auto; margin-right: auto; }
-.land-stats { display: flex; gap: 20px; justify-content: center; margin: 48px 0; flex-wrap: wrap; }
-.land-stat { background: linear-gradient(135deg, #131824, #182135);
-    border: 1px solid #1e2a3f; border-radius: 14px; padding: 24px 36px; min-width: 160px; }
-.land-stat .num { color: #00d4ff; font-size: 2rem; font-weight: 800;
-    font-family: 'JetBrains Mono', monospace; }
-.land-stat .lbl { color: #8892a6; font-size: 0.78rem; margin-top: 6px;
-    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
-.land-features { display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 16px; margin-top: 48px; text-align: left; }
-.land-feature { background: rgba(19, 24, 36, 0.65); border: 1px solid #1e2a3f;
-    border-radius: 14px; padding: 22px; }
-.land-feature h4 { color: #e0e6ed; font-size: 0.94rem; margin: 0 0 8px 0; font-weight: 700; }
-.land-feature p { color: #6b7a90; font-size: 0.85rem; margin: 0; line-height: 1.6; }
+    -webkit-text-stroke: 0.5px rgba(240, 185, 11, 0.1);
+    margin: 0 0 24px 0; letter-spacing: -0.045em;
+    filter: drop-shadow(0 4px 40px rgba(240, 185, 11, 0.15));
+}
+.land-tagline {
+    font-size: 1.35rem; color: #d0d8e5; font-weight: 500;
+    letter-spacing: 0.02em; margin: 0 0 20px 0; line-height: 1.5;
+}
+.land-sub {
+    color: #8a97ab; font-size: 1.05rem; line-height: 1.75;
+    max-width: 640px; margin: 0 auto;
+}
+.land-stats {
+    display: flex; gap: 20px; justify-content: center;
+    margin: 56px 0 0; flex-wrap: wrap;
+}
+.land-stat {
+    background: linear-gradient(135deg, rgba(19, 24, 38, 0.9), rgba(12, 16, 26, 0.9));
+    border: 1px solid #1a2235; border-radius: 16px;
+    padding: 24px 40px; min-width: 170px;
+    transition: all 0.3s ease;
+}
+.land-stat:hover {
+    border-color: rgba(240, 185, 11, 0.35);
+    box-shadow: 0 4px 30px rgba(240, 185, 11, 0.08);
+    transform: translateY(-2px);
+}
+.land-stat .num {
+    background: linear-gradient(135deg, #ffffff, #f0b90b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: 2.2rem; font-weight: 800;
+    font-family: 'JetBrains Mono', monospace; line-height: 1;
+}
+.land-stat .lbl {
+    color: #8a97ab; font-size: 0.72rem; margin-top: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+}
+.land-features {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px; margin-top: 56px; text-align: left;
+}
+.land-feature {
+    background: linear-gradient(135deg, rgba(19, 24, 38, 0.7), rgba(12, 16, 26, 0.7));
+    border: 1px solid #1a2235; border-radius: 16px; padding: 26px;
+    transition: border-color 0.25s ease;
+}
+.land-feature:hover { border-color: rgba(240, 185, 11, 0.3); }
+.land-feature h4 {
+    color: #eef2f8; font-size: 0.96rem; margin: 0 0 10px 0;
+    font-weight: 700; letter-spacing: -0.01em;
+}
+.land-feature p {
+    color: #7a8699; font-size: 0.85rem; margin: 0; line-height: 1.65;
+}
 
-.hero-wrap { background: linear-gradient(135deg, rgba(0,212,255,0.08) 0%, rgba(0,230,118,0.05) 100%);
-    border: 1px solid rgba(0, 212, 255, 0.18); border-radius: 16px;
-    padding: 26px 32px; margin-bottom: 20px;
-    box-shadow: 0 8px 40px rgba(0, 212, 255, 0.06); }
-.hero-eyebrow { font-size: 0.72rem; letter-spacing: 0.32em; color: #00d4ff;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 6px; }
-.hero-title { font-size: 2.1rem; font-weight: 800;
-    background: linear-gradient(90deg, #ffffff 0%, #a8e6ff 60%, #00d4ff 100%);
+/* ─── HERO BANNER ─── */
+.hero-wrap {
+    background:
+        linear-gradient(135deg, rgba(240, 185, 11, 0.06) 0%, rgba(0, 212, 255, 0.04) 100%),
+        linear-gradient(180deg, rgba(19, 24, 38, 0.5), rgba(10, 14, 24, 0.5));
+    border: 1px solid rgba(240, 185, 11, 0.16);
+    border-radius: 20px;
+    padding: 36px 40px; margin-bottom: 24px;
+    box-shadow: 0 12px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    position: relative; overflow: hidden;
+}
+.hero-wrap::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(240, 185, 11, 0.6), transparent);
+}
+.hero-eyebrow {
+    font-size: 0.72rem; letter-spacing: 0.36em; color: #f0b90b;
+    font-weight: 800; text-transform: uppercase; margin-bottom: 12px;
+}
+.hero-title {
+    font-size: 3.2rem; font-weight: 900; line-height: 1;
+    background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 50%, #f0b90b 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    margin: 0 0 6px 0; letter-spacing: -0.02em; }
-.hero-sub { color: #6b7a90; font-size: 0.94rem; margin: 0; }
-.status-pill { display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 14px; border-radius: 999px; font-size: 0.74rem;
-    font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-    margin-top: 16px; }
-.status-live { background: rgba(0,230,118,0.12); color: #00e676;
-    border: 1px solid rgba(0,230,118,0.35); }
-.status-closed { background: rgba(255,171,0,0.10); color: #ffab00;
-    border: 1px solid rgba(255,171,0,0.35); }
+    margin: 0 0 14px 0; letter-spacing: -0.04em;
+    filter: drop-shadow(0 2px 24px rgba(240, 185, 11, 0.12));
+}
+.hero-sub {
+    color: #b8c4d4; font-size: 1.02rem; margin: 0;
+    font-weight: 500; letter-spacing: 0.01em;
+}
+.status-pill {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 18px; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 800;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-top: 20px;
+}
+.status-live {
+    background: rgba(0, 230, 118, 0.1); color: #00e676;
+    border: 1px solid rgba(0, 230, 118, 0.35);
+}
+.status-closed {
+    background: rgba(255, 171, 0, 0.08); color: #ffab00;
+    border: 1px solid rgba(255, 171, 0, 0.35);
+}
 .dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot-live { background: #00e676; box-shadow: 0 0 8px #00e676; animation: pulse 1.8s infinite; }
+.dot-live {
+    background: #00e676;
+    box-shadow: 0 0 12px #00e676;
+    animation: pulse 1.8s infinite;
+}
 .dot-closed { background: #ffab00; }
 @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
 
-.control-card { background: linear-gradient(135deg, #131824 0%, #182135 100%);
-    border: 1px solid #1e2a3f; border-radius: 16px;
-    padding: 26px 30px; margin-bottom: 20px;
-    box-shadow: 0 6px 32px rgba(0,0,0,0.35); }
-.control-title { color: #00d4ff; font-size: 0.76rem; letter-spacing: 0.18em;
-    font-weight: 800; text-transform: uppercase; margin-bottom: 18px; }
+/* ─── CONTROL CARD ─── */
+.control-card {
+    background: linear-gradient(135deg, rgba(19, 24, 38, 0.95), rgba(12, 16, 26, 0.95));
+    border: 1px solid #1a2235; border-radius: 18px;
+    padding: 28px 32px; margin-bottom: 22px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+}
+.control-title {
+    color: #f0b90b; font-size: 0.74rem; letter-spacing: 0.22em;
+    font-weight: 800; text-transform: uppercase; margin-bottom: 22px;
+    display: flex; align-items: center; gap: 10px;
+}
 
-[data-testid="stMetric"] { background: linear-gradient(135deg, #131824, #182135);
-    border: 1px solid #1e2a3f; border-radius: 14px;
-    padding: 18px 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.35); }
-[data-testid="stMetricLabel"] { color: #6b7a90 !important; font-size: 0.74rem !important;
-    letter-spacing: 0.08em !important; text-transform: uppercase !important;
-    font-weight: 700 !important; }
-[data-testid="stMetricValue"] { color: #e0e6ed !important;
+/* ─── METRIC CARDS ─── */
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, #131826 0%, #0d1220 100%);
+    border: 1px solid #1a2235; border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 4px 28px rgba(0, 0, 0, 0.4);
+    transition: border-color 0.25s ease;
+}
+[data-testid="stMetric"]:hover { border-color: rgba(0, 212, 255, 0.25); }
+[data-testid="stMetricLabel"] {
+    color: #8a97ab !important; font-size: 0.72rem !important;
+    letter-spacing: 0.12em !important; text-transform: uppercase !important;
+    font-weight: 800 !important;
+}
+[data-testid="stMetricValue"] {
+    color: #f5f8fc !important;
     font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 700 !important; font-size: 1.9rem !important; }
+    font-weight: 700 !important; font-size: 2rem !important;
+    letter-spacing: -0.02em;
+}
+[data-testid="stMetricDelta"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-weight: 600 !important;
+}
 
+/* ─── BUTTONS ─── */
+.stButton > button {
+    border-radius: 12px; font-weight: 700;
+    letter-spacing: 0.08em; transition: all 0.2s ease;
+    border: 1px solid #1e2a3f;
+    background: linear-gradient(180deg, #1a2235, #131826);
+    color: #eef2f8 !important;
+    padding: 0.75rem 1.4rem;
+}
+.stButton > button:hover {
+    border-color: rgba(0, 212, 255, 0.4);
+    color: #00d4ff !important;
+}
 .stButton > button[kind="primary"] {
-    background: linear-gradient(90deg, #00d4ff 0%, #00a3cc 100%);
-    color: #0a0e1a !important; border: none; font-weight: 800;
-    letter-spacing: 0.1em; padding: 0.9rem 2rem; border-radius: 12px;
-    font-size: 0.98rem; box-shadow: 0 6px 24px rgba(0, 212, 255, 0.35);
-    transition: all 0.2s ease; text-transform: uppercase; }
-.stButton > button[kind="primary"]:hover { transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(0, 212, 255, 0.55); }
-
+    background: linear-gradient(135deg, #00d4ff 0%, #00a3cc 100%);
+    color: #06080f !important; border: none; font-weight: 900;
+    letter-spacing: 0.12em; padding: 1rem 2.2rem;
+    font-size: 1rem;
+    box-shadow: 0 8px 32px rgba(0, 212, 255, 0.35);
+    text-transform: uppercase;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.55);
+    color: #06080f !important;
+}
 .stDownloadButton > button {
-    background: linear-gradient(90deg, #00e676 0%, #00b862 100%);
-    color: #0a0e1a !important; font-weight: 700;
-    border-radius: 10px; border: none; padding: 0.6rem 1.4rem; }
+    background: linear-gradient(135deg, #00e676 0%, #00b862 100%);
+    color: #06080f !important; font-weight: 800;
+    border-radius: 12px; border: none; padding: 0.75rem 1.6rem;
+    letter-spacing: 0.06em;
+}
+.stDownloadButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px rgba(0, 230, 118, 0.45);
+}
 
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid #1e2a3f; }
-.stTabs [data-baseweb="tab"] { color: #6b7a90; font-weight: 600;
-    font-size: 0.85rem; letter-spacing: 0.05em; text-transform: uppercase;
-    padding: 10px 20px; }
-.stTabs [aria-selected="true"] { color: #00d4ff !important;
-    border-bottom-color: #00d4ff !important; }
-h2, h3, h4 { color: #e0e6ed !important; }
+/* ─── TABS ─── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 6px; border-bottom: 1px solid #1a2235;
+    padding-bottom: 0;
+}
+.stTabs [data-baseweb="tab"] {
+    color: #7a8699; font-weight: 700; font-size: 0.82rem;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 12px 22px;
+    transition: color 0.2s ease;
+}
+.stTabs [data-baseweb="tab"]:hover { color: #b8c4d4; }
+.stTabs [aria-selected="true"] {
+    color: #f0b90b !important;
+    border-bottom-color: #f0b90b !important;
+    border-bottom-width: 2px !important;
+}
 
-.fintrix-footer { text-align:center; margin-top:48px; padding-top:24px;
-    border-top:1px solid #1e2a3f; }
-.fintrix-footer .brand { color:#3a4355; font-size:0.68rem; letter-spacing:0.24em;
-    font-weight:800; text-transform:uppercase; }
-.fintrix-footer .tag { color:#2a3244; font-size:0.6rem; letter-spacing:0.12em;
-    margin-top:6px; }
+/* ─── HEADINGS ─── */
+h2, h3, h4 {
+    color: #eef2f8 !important; letter-spacing: -0.015em;
+    font-weight: 700 !important;
+}
+h2 { font-size: 1.35rem !important; margin-top: 1.6rem !important; }
+h3 { font-size: 1.15rem !important; }
+h4 { font-size: 1rem !important; }
+
+/* ─── INPUTS & SELECTS ─── */
+.stSelectbox label, .stMultiSelect label, .stSlider label, .stRadio label {
+    color: #b8c4d4 !important; font-weight: 600 !important;
+    font-size: 0.85rem !important; letter-spacing: 0.02em;
+}
+[data-baseweb="select"] > div {
+    background: #131826 !important;
+    border: 1px solid #1a2235 !important;
+    border-radius: 10px !important;
+}
+
+/* ─── ALERTS ─── */
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+    border-left-width: 3px;
+    font-size: 0.92rem;
+}
+
+/* ─── FOOTER ─── */
+.fintrix-footer {
+    text-align: center; margin-top: 64px; padding: 40px 20px 20px;
+    border-top: 1px solid #1a2235;
+    position: relative;
+}
+.fintrix-footer::before {
+    content: ''; position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(240, 185, 11, 0.5), transparent);
+}
+.fintrix-footer .brand {
+    font-size: 1.1rem; font-weight: 900; letter-spacing: 0.24em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #ffffff, #f0b90b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+}
+.fintrix-footer .tag {
+    color: #5a6578; font-size: 0.68rem; letter-spacing: 0.18em;
+    text-transform: uppercase; font-weight: 600;
+}
 
 /* ─── MOBILE ─── */
 @media (max-width: 768px) {
-    .block-container { padding-left: 0.75rem; padding-right: 0.75rem; padding-top: 1rem; }
-    .hero-wrap { padding: 18px 20px !important; border-radius: 12px !important; }
-    .hero-title { font-size: 1.4rem !important; }
-    .hero-eyebrow { font-size: 0.6rem !important; letter-spacing: 0.24em !important; }
-    .hero-sub { font-size: 0.82rem !important; }
-    .control-card { padding: 16px 18px !important; border-radius: 12px !important; }
-    .control-title { font-size: 0.68rem !important; letter-spacing: 0.14em !important;
-        margin-bottom: 12px !important; }
-    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.6rem !important; letter-spacing: 0.05em !important; }
-    [data-testid="stMetric"] { padding: 14px 16px !important; border-radius: 10px !important; }
-    .stButton > button { padding: 0.75rem 1rem !important; font-size: 0.85rem !important;
-        min-height: 44px !important; }
-    .stButton > button[kind="primary"] { padding: 0.9rem 1.2rem !important;
-        font-size: 0.88rem !important; letter-spacing: 0.06em !important; }
-    .stTabs [data-baseweb="tab"] { font-size: 0.7rem !important;
-        padding: 8px 10px !important; letter-spacing: 0.03em !important; }
-    .land-wrap { margin: 40px auto; padding: 0 16px; }
-    .land-title { font-size: 2rem !important; }
-    .land-sub { font-size: 0.95rem !important; line-height: 1.6 !important; }
-    .land-stats { gap: 10px; margin: 30px 0; }
-    .land-stat { padding: 16px 22px; min-width: 105px; flex: 1; }
+    .block-container { padding-left: 0.9rem; padding-right: 0.9rem; padding-top: 1rem; }
+
+    .land-wrap { margin: 40px auto 30px; padding: 0 12px; }
+    .land-title { font-size: 2.6rem !important; letter-spacing: -0.035em; line-height: 1; }
+    .land-tagline { font-size: 1rem !important; }
+    .land-sub { font-size: 0.9rem !important; line-height: 1.6 !important; }
+    .land-eyebrow { font-size: 0.62rem !important; letter-spacing: 0.28em !important;
+        padding: 6px 14px; margin-bottom: 20px; }
+    .land-stats { gap: 10px; margin-top: 32px; }
+    .land-stat { padding: 16px 22px; min-width: 100px; flex: 1; }
     .land-stat .num { font-size: 1.5rem; }
-    .land-stat .lbl { font-size: 0.62rem; }
-    .land-features { grid-template-columns: 1fr; margin-top: 30px; }
-    .land-feature { padding: 16px; }
+    .land-stat .lbl { font-size: 0.62rem; letter-spacing: 0.1em; }
+    .land-features { grid-template-columns: 1fr; margin-top: 32px; gap: 12px; }
+    .land-feature { padding: 18px; }
     .land-feature h4 { font-size: 0.88rem; }
     .land-feature p { font-size: 0.78rem; }
-    .status-pill { font-size: 0.65rem; padding: 5px 11px; }
+
+    .hero-wrap { padding: 22px 22px !important; border-radius: 14px !important; }
+    .hero-title { font-size: 1.9rem !important; letter-spacing: -0.03em; }
+    .hero-eyebrow { font-size: 0.6rem !important; letter-spacing: 0.26em !important; }
+    .hero-sub { font-size: 0.82rem !important; }
+    .status-pill { font-size: 0.62rem !important; padding: 6px 12px !important;
+        letter-spacing: 0.1em; margin-top: 14px; }
+
+    .control-card { padding: 18px 18px !important; border-radius: 14px !important; }
+    .control-title { font-size: 0.66rem !important; letter-spacing: 0.16em !important;
+        margin-bottom: 14px !important; }
+
+    [data-testid="stMetric"] { padding: 14px 16px !important; border-radius: 12px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.58rem !important; letter-spacing: 0.08em !important; }
+
+    .stButton > button {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.82rem !important;
+        min-height: 46px !important;
+    }
+    .stButton > button[kind="primary"] {
+        padding: 0.95rem 1.2rem !important;
+        font-size: 0.86rem !important; letter-spacing: 0.08em !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-size: 0.68rem !important; padding: 9px 10px !important;
+        letter-spacing: 0.04em !important;
+    }
     h2 { font-size: 1.1rem !important; }
     h3 { font-size: 1rem !important; }
     h4 { font-size: 0.9rem !important; }
+
+    .fintrix-footer { margin-top: 40px; padding-top: 28px; }
+    .fintrix-footer .brand { font-size: 0.9rem; letter-spacing: 0.2em; }
+    .fintrix-footer .tag { font-size: 0.6rem; letter-spacing: 0.14em; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -495,7 +700,7 @@ def cached_batch(tickers_tuple):
 
 
 # ─────────────────────────────────────────────────────────
-# ADVANCED ANALYTICS  (vol_score added to outputs)
+# ADVANCED ANALYTICS
 # ─────────────────────────────────────────────────────────
 def compute_signal_context(scanned, row):
     sig_dt = row["datetime"]
@@ -505,7 +710,6 @@ def compute_signal_context(scanned, row):
         sig_pos = int(scanned.index.get_indexer([sig_dt], method="nearest")[0])
 
     bar = scanned.iloc[sig_pos]
-
     vol_ma = bar.get("vol_ma", np.nan)
     vol_ratio = float(bar["volume"] / vol_ma) if (vol_ma and vol_ma > 0) else 0.0
     dev = float(bar["distance_pct"])
@@ -514,7 +718,6 @@ def compute_signal_context(scanned, row):
     vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
     dev_score = min(100.0, abs(dev) / 12.0 * 100)
     bias_score = min(100.0, abs(bias) / 35.0 * 100)
-
     quality = round(0.30 * vol_score + 0.35 * dev_score + 0.35 * bias_score)
 
     if quality >= 80:   label = "Exceptional"
@@ -537,18 +740,13 @@ def compute_signal_context(scanned, row):
         change_since = 0.0
 
     return {
-        "vol_ratio": vol_ratio,
-        "vol_score": vol_score,
+        "vol_ratio": vol_ratio, "vol_score": vol_score,
         "dev": dev, "bias": bias,
         "quality": quality, "quality_label": label,
-        "dist_from_high": dist_from_high,
-        "dist_from_low": dist_from_low,
-        "bars_since": int(bars_since),
-        "change_since": float(change_since),
-        "sig_pos": int(sig_pos),
-        "bar": bar,
-        "recent_high": recent_high,
-        "recent_low": recent_low,
+        "dist_from_high": dist_from_high, "dist_from_low": dist_from_low,
+        "bars_since": int(bars_since), "change_since": float(change_since),
+        "sig_pos": int(sig_pos), "bar": bar,
+        "recent_high": recent_high, "recent_low": recent_low,
     }
 
 
@@ -583,8 +781,7 @@ def get_current_mtf_state(raw):
                 "signal": bool(last["signal_final"]),
                 "bias": float(last["raw_di_diff"]),
                 "dev": float(last["distance_pct"]),
-                "vol_ratio": vol_ratio,
-                "vol_score": vol_score,
+                "vol_ratio": vol_ratio, "vol_score": vol_score,
             }
         except Exception:
             result[tf_name] = None
@@ -596,7 +793,6 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
     start = sig_dt - pd.Timedelta(days=window_days)
     end   = sig_dt + pd.Timedelta(days=2)
     win = scanned.loc[(scanned.index >= start) & (scanned.index <= end)].copy()
-
     if win.empty:
         return None
 
@@ -613,17 +809,17 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
 
     fig.add_trace(go.Scatter(
         x=win.index, y=win["ema_value"], name="Baseline",
-        line=dict(color="#00d4ff", width=1.6), opacity=0.85,
+        line=dict(color="#f0b90b", width=1.8), opacity=0.9,
         hovertemplate="Baseline: %{y:.2f}<extra></extra>",
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         x=[sig_dt], y=[float(ctx["bar"]["close"])],
         mode="markers+text",
-        marker=dict(symbol="star", size=22, color="#ffcc00",
+        marker=dict(symbol="star", size=22, color="#f0b90b",
                     line=dict(color="#ffffff", width=2)),
         text=["SIGNAL"], textposition="top center",
-        textfont=dict(color="#ffcc00", size=11, family="Inter"),
+        textfont=dict(color="#f0b90b", size=11, family="Inter"),
         name="Signal", hoverinfo="skip", showlegend=False,
     ), row=1, col=1)
 
@@ -637,23 +833,22 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
     fig.update_layout(
         height=560, template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(19, 24, 36, 0.55)",
-        font=dict(family="Inter", color="#e0e6ed", size=11),
+        plot_bgcolor="rgba(10, 15, 28, 0.7)",
+        font=dict(family="Inter", color="#eef2f8", size=11),
         margin=dict(l=10, r=10, t=20, b=10),
         showlegend=False, hovermode="x unified", dragmode="pan",
     )
-    fig.update_xaxes(rangeslider_visible=False, gridcolor="#1a2130")
-    fig.update_yaxes(gridcolor="#1a2130", title_text="Price", row=1, col=1)
-    fig.update_yaxes(gridcolor="#1a2130", title_text="Volume", row=2, col=1)
+    fig.update_xaxes(rangeslider_visible=False, gridcolor="#1a2235")
+    fig.update_yaxes(gridcolor="#1a2235", title_text="Price", row=1, col=1)
+    fig.update_yaxes(gridcolor="#1a2235", title_text="Volume", row=2, col=1)
     return fig
 
 
 def build_signal_timeline(ticker_df):
-    """Timeline with Level labels instead of timeframes."""
     fig = go.Figure()
     level_colors = {
         "15m": "#00d4ff", "30m": "#00e676",
-        "45m": "#ffcc00", "60m": "#ff7ab3",
+        "45m": "#f0b90b", "60m": "#ff7ab3",
     }
     for tf in LEVEL_ORDER:
         sub = ticker_df[ticker_df["timeframe"] == tf]
@@ -670,12 +865,12 @@ def build_signal_timeline(ticker_df):
     fig.update_layout(
         height=170, template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(19, 24, 36, 0.55)",
+        plot_bgcolor="rgba(10, 15, 28, 0.7)",
         margin=dict(l=80, r=10, t=10, b=10),
-        showlegend=False, font=dict(family="Inter", color="#e0e6ed", size=11),
+        showlegend=False, font=dict(family="Inter", color="#eef2f8", size=11),
     )
-    fig.update_xaxes(gridcolor="#1a2130")
-    fig.update_yaxes(gridcolor="#1a2130",
+    fig.update_xaxes(gridcolor="#1a2235")
+    fig.update_yaxes(gridcolor="#1a2235",
                      categoryorder="array",
                      categoryarray=[LEVEL_LABEL[t] for t in reversed(LEVEL_ORDER)])
     return fig
@@ -723,15 +918,16 @@ def generate_narrative(row, ctx, mtf):
 
 
 # ─────────────────────────────────────────────────────────
-# LANDING SCREEN
+# LANDING SCREEN — Fintrix Analytics as the hero
 # ─────────────────────────────────────────────────────────
 if not st.session_state.get("entered"):
     st.markdown(f"""
     <div class="land-wrap">
-        <div class="land-eyebrow">◈ {BRAND_NAME.upper()}</div>
-        <h1 class="land-title">Signal Detection Suite</h1>
+        <div class="land-eyebrow">◆ SIGNAL INTELLIGENCE PLATFORM</div>
+        <h1 class="land-title">{BRAND_NAME}</h1>
+        <p class="land-tagline">Institutional-Grade Signal Discovery</p>
         <p class="land-sub">
-            A multi-level confluence engine that identifies high-probability
+            A multi-level confluence engine that surfaces high-probability
             exhaustion patterns across four intraday analysis horizons.
         </p>
         <div class="land-stats">
@@ -761,14 +957,14 @@ if not st.session_state.get("entered"):
 
     _, c, _ = st.columns([1, 1, 1])
     with c:
-        if st.button("▶  Enter Suite", use_container_width=True, type="primary"):
+        if st.button("◆  Enter Platform", use_container_width=True, type="primary"):
             st.session_state.entered = True
             st.rerun()
     st.stop()
 
 
 # ─────────────────────────────────────────────────────────
-# HERO HEADER
+# HERO HEADER — Fintrix Analytics as the dominant title
 # ─────────────────────────────────────────────────────────
 live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
@@ -776,8 +972,8 @@ dot_cls  = "dot-live" if live else "dot-closed"
 
 st.markdown(f"""
 <div class="hero-wrap">
-    <div class="hero-eyebrow">◈ {BRAND_NAME.upper()}</div>
-    <div class="hero-title">Signal Detection Suite</div>
+    <div class="hero-eyebrow">◆ SIGNAL INTELLIGENCE PLATFORM</div>
+    <div class="hero-title">{BRAND_NAME}</div>
     <p class="hero-sub">Multi-level confluence engine · 4 analysis horizons</p>
     <div class="status-pill {pill_cls}">
         <span class="dot {dot_cls}"></span> {status_label}
@@ -942,9 +1138,7 @@ tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
 )
 
 
-# ═════════════════════════════════════════════════════════
-# TAB 1 — SIGNALS (presentable + top 3 green)
-# ═════════════════════════════════════════════════════════
+# ─── TAB 1: SIGNALS ─────────────────────────────────────
 with tab_sig:
     if df.empty:
         st.info(f"No signals detected in the last {meta.get('days_back', 10)} days.")
@@ -974,7 +1168,6 @@ with tab_sig:
             filt = filt[filt["ticker"].isin(tk_f)]
         filt = filt.sort_values(["datetime", "ticker"], ascending=[False, True])
 
-        # ── Build clean display table ──────────────────
         disp = filt.copy().reset_index(drop=True)
         disp.insert(0, "Rank", range(1, len(disp) + 1))
         disp["Timestamp"] = disp["datetime"].dt.strftime("%d %b %Y · %H:%M")
@@ -988,7 +1181,6 @@ with tab_sig:
                      "Last Price", "Deviation", "Bias"]
         disp = disp[cols_show]
 
-        # ── Highlight top 3 most recent rows green ─────
         top3_set = set(range(min(3, len(disp))))
 
         def _style_row(row):
@@ -1017,9 +1209,7 @@ with tab_sig:
         st.caption("🟢 Green rows mark the 3 most recent signals.")
 
 
-# ═════════════════════════════════════════════════════════
-# TAB 2 — CHART (Level labels + Quant Score)
-# ═════════════════════════════════════════════════════════
+# ─── TAB 2: CHART ───────────────────────────────────────
 with tab_chart:
     if df.empty:
         st.info("No signals available — run a scan with at least one qualified hit.")
@@ -1058,7 +1248,6 @@ with tab_chart:
             ctx = compute_signal_context(scanned, row)
             mtf = get_current_mtf_state(raw)
 
-            # ─── Quant Scorecard ──────────────────────────
             q1, q2, q3, q4, q5 = st.columns(5)
             q1.metric("Signal Quality", f"{ctx['quality']}/100", ctx["quality_label"])
             q2.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
@@ -1067,7 +1256,6 @@ with tab_chart:
             q4.metric("Bias", f"{ctx['bias']:.2f}")
             q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
 
-            # ─── Main Chart ────────────────────────────────
             st.markdown("#### Price Action · Signal Overlay")
             fig = build_pro_chart(scanned, row, ctx, window_days=7)
             if fig is not None:
@@ -1076,7 +1264,6 @@ with tab_chart:
             else:
                 st.warning("No price bars available around this signal.")
 
-            # ─── Level Alignment Matrix ────────────────────
             st.markdown("#### Level Alignment Matrix")
             mtf_rows = []
             for tf_name in LEVEL_ORDER:
@@ -1106,11 +1293,9 @@ with tab_chart:
                 },
             )
 
-            # ─── Automated Analysis ────────────────────────
             st.markdown("#### Automated Analysis")
             st.info(generate_narrative(row, ctx, mtf))
 
-            # ─── Signal History timeline ───────────────────
             ticker_hist = df[df["ticker"] == row["ticker"]].copy()
             if len(ticker_hist) >= 1:
                 st.markdown("#### Signal History · This Instrument")
@@ -1118,7 +1303,6 @@ with tab_chart:
                 st.plotly_chart(timeline_fig, use_container_width=True,
                                 config={"displayModeBar": False})
 
-            # ─── Swing Context ─────────────────────────────
             st.markdown("#### Swing Context")
             s1, s2, s3, s4 = st.columns(4)
             s1.metric("Recent High", f"{ctx['recent_high']:.2f}",
@@ -1128,7 +1312,6 @@ with tab_chart:
             s3.metric("Bars Since Signal", ctx["bars_since"])
             s4.metric("Change Since", f"{ctx['change_since']:+.2f}%")
 
-            # ─── Related signals ───────────────────────────
             related = df[(df["ticker"] == row["ticker"])].copy()
             if len(related) > 1:
                 related = related.drop(df.index[idx]) if idx in df.index else related
@@ -1156,9 +1339,7 @@ with tab_chart:
                     )
 
 
-# ═════════════════════════════════════════════════════════
-# TAB 3 — ANALYTICS
-# ═════════════════════════════════════════════════════════
+# ─── TAB 3: ANALYTICS ───────────────────────────────────
 with tab_diag:
     st.markdown("### Detection Funnel")
     d1, d2, d3, d4 = st.columns(4)
@@ -1172,9 +1353,7 @@ with tab_diag:
     )
 
 
-# ═════════════════════════════════════════════════════════
-# TAB 4 — NOTES
-# ═════════════════════════════════════════════════════════
+# ─── TAB 4: NOTES ───────────────────────────────────────
 with tab_err:
     if not out["errors"]:
         st.success("No exceptions — all instruments processed cleanly.")
@@ -1185,11 +1364,11 @@ with tab_err:
 
 
 # ─────────────────────────────────────────────────────────
-# FOOTER — Fintrix Branding
+# FOOTER — Fintrix Analytics
 # ─────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="fintrix-footer">
-    <div class="brand">Powered by {BRAND_NAME}</div>
+    <div class="brand">{BRAND_NAME}</div>
     <div class="tag">SIGNAL INTELLIGENCE PLATFORM</div>
 </div>
 """, unsafe_allow_html=True)
