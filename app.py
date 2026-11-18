@@ -13,17 +13,31 @@ from plotly.subplots import make_subplots
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────
+# BRANDING + LEVEL MAPPING
+# ─────────────────────────────────────────────────────────
+BRAND_NAME = "Fintrix Analytics"
+
+# Internal timeframe keys → client-facing level labels
+LEVEL_LABEL = {
+    "15m": "Level 1",
+    "30m": "Level 2",
+    "45m": "Level 3",
+    "60m": "Level 4",
+}
+LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
+
+# ─────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Signal Detection Suite",
+    page_title=f"{BRAND_NAME} · Signal Detection Suite",
     page_icon="◈",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────
-# GLOBAL CSS
+# GLOBAL CSS  (desktop + mobile media queries)
 # ─────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -34,8 +48,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1500px; }
 
 .land-wrap { max-width: 900px; margin: 80px auto; text-align: center; }
-.land-eyebrow { font-size: 0.72rem; letter-spacing: 0.28em; color: #00d4ff;
-    font-weight: 700; text-transform: uppercase; margin-bottom: 16px; }
+.land-eyebrow { font-size: 0.72rem; letter-spacing: 0.32em; color: #00d4ff;
+    font-weight: 800; text-transform: uppercase; margin-bottom: 16px; }
 .land-title { font-size: 3.4rem; font-weight: 900;
     background: linear-gradient(90deg, #ffffff, #a8e6ff, #00d4ff);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
@@ -60,8 +74,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     border: 1px solid rgba(0, 212, 255, 0.18); border-radius: 16px;
     padding: 26px 32px; margin-bottom: 20px;
     box-shadow: 0 8px 40px rgba(0, 212, 255, 0.06); }
-.hero-eyebrow { font-size: 0.72rem; letter-spacing: 0.28em; color: #00d4ff;
-    font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+.hero-eyebrow { font-size: 0.72rem; letter-spacing: 0.32em; color: #00d4ff;
+    font-weight: 800; text-transform: uppercase; margin-bottom: 6px; }
 .hero-title { font-size: 2.1rem; font-weight: 800;
     background: linear-gradient(90deg, #ffffff 0%, #a8e6ff 60%, #00d4ff 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
@@ -118,6 +132,49 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .stTabs [aria-selected="true"] { color: #00d4ff !important;
     border-bottom-color: #00d4ff !important; }
 h2, h3, h4 { color: #e0e6ed !important; }
+
+.fintrix-footer { text-align:center; margin-top:48px; padding-top:24px;
+    border-top:1px solid #1e2a3f; }
+.fintrix-footer .brand { color:#3a4355; font-size:0.68rem; letter-spacing:0.24em;
+    font-weight:800; text-transform:uppercase; }
+.fintrix-footer .tag { color:#2a3244; font-size:0.6rem; letter-spacing:0.12em;
+    margin-top:6px; }
+
+/* ─── MOBILE ─── */
+@media (max-width: 768px) {
+    .block-container { padding-left: 0.75rem; padding-right: 0.75rem; padding-top: 1rem; }
+    .hero-wrap { padding: 18px 20px !important; border-radius: 12px !important; }
+    .hero-title { font-size: 1.4rem !important; }
+    .hero-eyebrow { font-size: 0.6rem !important; letter-spacing: 0.24em !important; }
+    .hero-sub { font-size: 0.82rem !important; }
+    .control-card { padding: 16px 18px !important; border-radius: 12px !important; }
+    .control-title { font-size: 0.68rem !important; letter-spacing: 0.14em !important;
+        margin-bottom: 12px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.6rem !important; letter-spacing: 0.05em !important; }
+    [data-testid="stMetric"] { padding: 14px 16px !important; border-radius: 10px !important; }
+    .stButton > button { padding: 0.75rem 1rem !important; font-size: 0.85rem !important;
+        min-height: 44px !important; }
+    .stButton > button[kind="primary"] { padding: 0.9rem 1.2rem !important;
+        font-size: 0.88rem !important; letter-spacing: 0.06em !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 0.7rem !important;
+        padding: 8px 10px !important; letter-spacing: 0.03em !important; }
+    .land-wrap { margin: 40px auto; padding: 0 16px; }
+    .land-title { font-size: 2rem !important; }
+    .land-sub { font-size: 0.95rem !important; line-height: 1.6 !important; }
+    .land-stats { gap: 10px; margin: 30px 0; }
+    .land-stat { padding: 16px 22px; min-width: 105px; flex: 1; }
+    .land-stat .num { font-size: 1.5rem; }
+    .land-stat .lbl { font-size: 0.62rem; }
+    .land-features { grid-template-columns: 1fr; margin-top: 30px; }
+    .land-feature { padding: 16px; }
+    .land-feature h4 { font-size: 0.88rem; }
+    .land-feature p { font-size: 0.78rem; }
+    .status-pill { font-size: 0.65rem; padding: 5px 11px; }
+    h2 { font-size: 1.1rem !important; }
+    h3 { font-size: 1rem !important; }
+    h4 { font-size: 0.9rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -192,7 +249,7 @@ TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
 
 
 # ─────────────────────────────────────────────────────────
-# INDICATOR HELPERS
+# INDICATOR HELPERS  (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def ta_ema(series, length):
     return series.ewm(span=length, adjust=False).mean()
@@ -214,7 +271,7 @@ def ta_stdev_pop(series, length):
 
 
 # ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE
+# CORE DETECTION ENGINE  (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def detect_signals(df):
     if isinstance(df.columns, pd.MultiIndex):
@@ -265,7 +322,7 @@ def detect_signals(df):
 
 
 # ─────────────────────────────────────────────────────────
-# BATCH FETCH
+# BATCH FETCH  (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def batch_fetch(tickers, period="60d", interval="15m"):
     symbols = [f"{t}.NS" if not t.endswith(".NS") else t for t in tickers]
@@ -302,7 +359,7 @@ def batch_fetch(tickers, period="60d", interval="15m"):
 
 
 # ─────────────────────────────────────────────────────────
-# PROCESS BATCH
+# PROCESS BATCH  (UNCHANGED)
 # ─────────────────────────────────────────────────────────
 def process_batch(batch_data, timeframes, days_back=10,
                   progress_cb=None, ticker_cb=None):
@@ -438,10 +495,9 @@ def cached_batch(tickers_tuple):
 
 
 # ─────────────────────────────────────────────────────────
-# ADVANCED ANALYTICS — TAB 2 BUILDING BLOCKS
+# ADVANCED ANALYTICS  (vol_score added to outputs)
 # ─────────────────────────────────────────────────────────
 def compute_signal_context(scanned, row):
-    """Extract quality metrics and context around a signal."""
     sig_dt = row["datetime"]
     if sig_dt in scanned.index:
         sig_pos = scanned.index.get_loc(sig_dt)
@@ -455,20 +511,18 @@ def compute_signal_context(scanned, row):
     dev = float(bar["distance_pct"])
     bias = float(bar["raw_di_diff"])
 
-    # Score components (0–100)
-    vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))     # 2×=0, 6×=100
-    dev_score = min(100.0, abs(dev) / 12.0 * 100)                        # 12% = 100
-    bias_score = min(100.0, abs(bias) / 35.0 * 100)                      # −45 = 100
+    vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
+    dev_score = min(100.0, abs(dev) / 12.0 * 100)
+    bias_score = min(100.0, abs(bias) / 35.0 * 100)
 
     quality = round(0.30 * vol_score + 0.35 * dev_score + 0.35 * bias_score)
 
-    if quality >= 80:   label, color = "Exceptional", "#00e676"
-    elif quality >= 65: label, color = "Strong",      "#00d4ff"
-    elif quality >= 50: label, color = "Moderate",    "#ffcc00"
-    elif quality >= 35: label, color = "Weak",        "#ff9800"
-    else:               label, color = "Marginal",    "#ff3d5a"
+    if quality >= 80:   label = "Exceptional"
+    elif quality >= 65: label = "Strong"
+    elif quality >= 50: label = "Moderate"
+    elif quality >= 35: label = "Weak"
+    else:               label = "Marginal"
 
-    # Swing context
     lookback = scanned.iloc[max(0, sig_pos - 100):sig_pos + 1]
     recent_high = float(lookback["high"].max())
     recent_low  = float(lookback["low"].min())
@@ -484,8 +538,9 @@ def compute_signal_context(scanned, row):
 
     return {
         "vol_ratio": vol_ratio,
+        "vol_score": vol_score,
         "dev": dev, "bias": bias,
-        "quality": quality, "quality_label": label, "quality_color": color,
+        "quality": quality, "quality_label": label,
         "dist_from_high": dist_from_high,
         "dist_from_low": dist_from_low,
         "bars_since": int(bars_since),
@@ -498,7 +553,6 @@ def compute_signal_context(scanned, row):
 
 
 def get_current_mtf_state(raw):
-    """Current state of this instrument across all 4 timeframes."""
     result = {}
     for tf_name, rule in TIMEFRAME_MAP.items():
         try:
@@ -513,22 +567,24 @@ def get_current_mtf_state(raw):
             last = scanned.iloc[-1]
             vma = last.get("vol_ma", np.nan)
             vol_ratio = float(last["volume"] / vma) if (vma and vma > 0) else 0.0
+            vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
 
             if bool(last["signal_final"]):
-                status, icon, color = "Active", "🟢", "#00e676"
+                status, icon = "Active", "🟢"
             elif bool(last["option_bottom_confirmed"]):
-                status, icon, color = "Exhaustion", "🟡", "#ffcc00"
+                status, icon = "Exhaustion", "🟡"
             elif float(last["raw_di_diff"]) < -10:
-                status, icon, color = "Bias Only", "🔵", "#00d4ff"
+                status, icon = "Bias Only", "🔵"
             else:
-                status, icon, color = "Quiet", "⚪", "#6b7a90"
+                status, icon = "Quiet", "⚪"
 
             result[tf_name] = {
-                "status": status, "icon": icon, "color": color,
+                "status": status, "icon": icon,
                 "signal": bool(last["signal_final"]),
                 "bias": float(last["raw_di_diff"]),
                 "dev": float(last["distance_pct"]),
                 "vol_ratio": vol_ratio,
+                "vol_score": vol_score,
             }
         except Exception:
             result[tf_name] = None
@@ -536,7 +592,6 @@ def get_current_mtf_state(raw):
 
 
 def build_pro_chart(scanned, row, ctx, window_days=7):
-    """Candlestick + EMA + signal + volume, plotly."""
     sig_dt = row["datetime"]
     start = sig_dt - pd.Timedelta(days=window_days)
     end   = sig_dt + pd.Timedelta(days=2)
@@ -545,67 +600,47 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
     if win.empty:
         return None
 
-    fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True,
-        vertical_spacing=0.04, row_heights=[0.74, 0.26],
-    )
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                        vertical_spacing=0.04, row_heights=[0.74, 0.26])
 
-    # Candlesticks
     fig.add_trace(go.Candlestick(
-        x=win.index,
-        open=win["open"], high=win["high"],
-        low=win["low"],  close=win["close"],
-        name="Price",
-        increasing_line_color="#00e676",
-        decreasing_line_color="#ff3d5a",
+        x=win.index, open=win["open"], high=win["high"],
+        low=win["low"], close=win["close"], name="Price",
+        increasing_line_color="#00e676", decreasing_line_color="#ff3d5a",
         increasing_fillcolor="rgba(0,230,118,0.25)",
         decreasing_fillcolor="rgba(255,61,90,0.25)",
     ), row=1, col=1)
 
-    # EMA baseline
     fig.add_trace(go.Scatter(
-        x=win.index, y=win["ema_value"],
-        name="Baseline",
-        line=dict(color="#00d4ff", width=1.6),
-        opacity=0.85,
+        x=win.index, y=win["ema_value"], name="Baseline",
+        line=dict(color="#00d4ff", width=1.6), opacity=0.85,
         hovertemplate="Baseline: %{y:.2f}<extra></extra>",
     ), row=1, col=1)
 
-    # Signal star
     fig.add_trace(go.Scatter(
         x=[sig_dt], y=[float(ctx["bar"]["close"])],
         mode="markers+text",
         marker=dict(symbol="star", size=22, color="#ffcc00",
                     line=dict(color="#ffffff", width=2)),
-        text=["SIGNAL"],
-        textposition="top center",
+        text=["SIGNAL"], textposition="top center",
         textfont=dict(color="#ffcc00", size=11, family="Inter"),
-        name="Signal",
-        hoverinfo="skip",
-        showlegend=False,
+        name="Signal", hoverinfo="skip", showlegend=False,
     ), row=1, col=1)
 
-    # Volume
     colors = ["#00e676" if c >= o else "#ff3d5a"
               for o, c in zip(win["open"], win["close"])]
     fig.add_trace(go.Bar(
-        x=win.index, y=win["volume"],
-        name="Volume",
-        marker_color=colors,
-        marker_line_width=0,
-        opacity=0.7,
+        x=win.index, y=win["volume"], name="Volume",
+        marker_color=colors, marker_line_width=0, opacity=0.7,
     ), row=2, col=1)
 
     fig.update_layout(
-        height=560,
-        template="plotly_dark",
+        height=560, template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(19, 24, 36, 0.55)",
         font=dict(family="Inter", color="#e0e6ed", size=11),
         margin=dict(l=10, r=10, t=20, b=10),
-        showlegend=False,
-        hovermode="x unified",
-        dragmode="pan",
+        showlegend=False, hovermode="x unified", dragmode="pan",
     )
     fig.update_xaxes(rangeslider_visible=False, gridcolor="#1a2130")
     fig.update_yaxes(gridcolor="#1a2130", title_text="Price", row=1, col=1)
@@ -614,67 +649,68 @@ def build_pro_chart(scanned, row, ctx, window_days=7):
 
 
 def build_signal_timeline(ticker_df):
-    """Horizontal timeline of all signals for a ticker across TFs."""
+    """Timeline with Level labels instead of timeframes."""
     fig = go.Figure()
-    tf_colors = {"15m": "#00d4ff", "30m": "#00e676",
-                 "45m": "#ffcc00", "60m": "#ff7ab3"}
-    for tf in ["15m", "30m", "45m", "60m"]:
+    level_colors = {
+        "15m": "#00d4ff", "30m": "#00e676",
+        "45m": "#ffcc00", "60m": "#ff7ab3",
+    }
+    for tf in LEVEL_ORDER:
         sub = ticker_df[ticker_df["timeframe"] == tf]
         if sub.empty:
             continue
         fig.add_trace(go.Scatter(
-            x=sub["datetime"], y=[tf] * len(sub),
+            x=sub["datetime"], y=[LEVEL_LABEL[tf]] * len(sub),
             mode="markers",
-            marker=dict(size=14, color=tf_colors[tf],
+            marker=dict(size=14, color=level_colors[tf],
                         line=dict(color="#ffffff", width=1)),
-            name=tf,
-            hovertemplate=f"{tf}<br>%{{x|%d %b %H:%M}}<extra></extra>",
+            name=LEVEL_LABEL[tf],
+            hovertemplate=f"{LEVEL_LABEL[tf]}<br>%{{x|%d %b %H:%M}}<extra></extra>",
         ))
     fig.update_layout(
-        height=170,
-        template="plotly_dark",
+        height=170, template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(19, 24, 36, 0.55)",
-        margin=dict(l=50, r=10, t=10, b=10),
-        showlegend=False,
-        font=dict(family="Inter", color="#e0e6ed", size=11),
+        margin=dict(l=80, r=10, t=10, b=10),
+        showlegend=False, font=dict(family="Inter", color="#e0e6ed", size=11),
     )
     fig.update_xaxes(gridcolor="#1a2130")
     fig.update_yaxes(gridcolor="#1a2130",
                      categoryorder="array",
-                     categoryarray=["60m", "45m", "30m", "15m"])
+                     categoryarray=[LEVEL_LABEL[t] for t in reversed(LEVEL_ORDER)])
     return fig
 
 
 def generate_narrative(row, ctx, mtf):
-    """Short plain-English summary of the signal."""
     ticker = row["ticker"]
-    tf = row["timeframe"]
+    level = LEVEL_LABEL[row["timeframe"]]
     sig_time = row["datetime"]
 
     aligned = [k for k, v in mtf.items() if v and v["signal"]]
     n_aligned = len(aligned)
 
     if n_aligned >= 3:
-        conviction = "**high conviction** — broad multi-timeframe alignment"
+        conviction = "**high conviction** — broad multi-level alignment"
     elif n_aligned == 2:
-        conviction = "**moderate conviction** — partial timeframe agreement"
+        conviction = "**moderate conviction** — partial level agreement"
     elif n_aligned == 1:
-        conviction = "**single-timeframe signal** — confirmation pending"
+        conviction = "**single-level signal** — confirmation pending"
     else:
         conviction = "**historical signal** — current state has cooled"
 
+    aligned_labels = [LEVEL_LABEL[k] for k in aligned]
+
     parts = [
-        f"**{ticker}** triggered on **{tf}** at **{sig_time:%d %b %Y, %H:%M}** "
+        f"**{ticker}** triggered on **{level}** at **{sig_time:%d %b %Y, %H:%M}** "
         f"with a signal quality score of **{ctx['quality']}/100** ({ctx['quality_label']}).",
 
         f"Price closed at **{float(ctx['bar']['close']):.2f}**, "
         f"**{abs(ctx['dev']):.2f}%** below its 20-bar baseline, "
-        f"on **{ctx['vol_ratio']:.1f}×** average volume. "
+        f"with a quant score of **{ctx['vol_score']:.0f}/100**. "
         f"Directional bias printed at **{ctx['bias']:.1f}**, confirming sustained selling pressure.",
 
-        f"Timeframe alignment: **{n_aligned} of 4** "
-        f"({', '.join(aligned) if aligned else 'none currently active'}) — {conviction}.",
+        f"Level alignment: **{n_aligned} of 4** "
+        f"({', '.join(aligned_labels) if aligned_labels else 'none currently active'}) — {conviction}.",
     ]
 
     if ctx["bars_since"] > 0:
@@ -690,35 +726,34 @@ def generate_narrative(row, ctx, mtf):
 # LANDING SCREEN
 # ─────────────────────────────────────────────────────────
 if not st.session_state.get("entered"):
-    st.markdown("""
+    st.markdown(f"""
     <div class="land-wrap">
-        <div class="land-eyebrow">◈ SIGNAL INTELLIGENCE</div>
+        <div class="land-eyebrow">◈ {BRAND_NAME.upper()}</div>
         <h1 class="land-title">Signal Detection Suite</h1>
         <p class="land-sub">
-            A multi-timeframe confluence engine that identifies high-probability
-            exhaustion patterns across intraday horizons — <b>15m</b>, <b>30m</b>,
-            <b>45m</b> and <b>60m</b>.
+            A multi-level confluence engine that identifies high-probability
+            exhaustion patterns across four intraday analysis horizons.
         </p>
         <div class="land-stats">
-            <div class="land-stat"><div class="num">4</div><div class="lbl">Timeframes</div></div>
+            <div class="land-stat"><div class="num">4</div><div class="lbl">Levels</div></div>
             <div class="land-stat"><div class="num">2</div><div class="lbl">Stage Filters</div></div>
             <div class="land-stat"><div class="num">250+</div><div class="lbl">Instruments</div></div>
         </div>
         <div class="land-features">
             <div class="land-feature">
-                <h4>Multi-timeframe Confluence</h4>
-                <p>Independent detection across four intraday horizons ensures
-                   only durable signals surface.</p>
+                <h4>Multi-Level Confluence</h4>
+                <p>Independent detection across four horizons ensures only
+                   durable signals reach the surface.</p>
             </div>
             <div class="land-feature">
-                <h4>Quality Scoring</h4>
+                <h4>Quant Scoring</h4>
                 <p>Every signal is graded 0–100 on volume, exhaustion depth,
-                   and bias strength.</p>
+                   and directional bias strength.</p>
             </div>
             <div class="land-feature">
                 <h4>Deep Analytics</h4>
-                <p>Candlestick overlays, alignment matrix, and automated
-                   analysis for every qualified hit.</p>
+                <p>Candlestick overlays, level alignment matrix, and
+                   automated analysis for every qualified hit.</p>
             </div>
         </div>
     </div>
@@ -741,9 +776,9 @@ dot_cls  = "dot-live" if live else "dot-closed"
 
 st.markdown(f"""
 <div class="hero-wrap">
-    <div class="hero-eyebrow">◈ SIGNAL INTELLIGENCE</div>
+    <div class="hero-eyebrow">◈ {BRAND_NAME.upper()}</div>
     <div class="hero-title">Signal Detection Suite</div>
-    <p class="hero-sub">Multi-timeframe confluence · 15m / 30m / 45m / 60m</p>
+    <p class="hero-sub">Multi-level confluence engine · 4 analysis horizons</p>
     <div class="status-pill {pill_cls}">
         <span class="dot {dot_cls}"></span> {status_label}
     </div>
@@ -773,21 +808,21 @@ with rc1:
 with rc2:
     max_tickers = st.slider(
         "Max Instruments", min_value=10, max_value=len(base),
-        value=min(50, len(base)), step=10,
+        value=len(base), step=10,
     )
 tickers = base[:max_tickers]
 
 rc3, rc4 = st.columns([3, 2])
 with rc3:
-    st.markdown("**Timeframes**")
-    tf_cols = st.columns(4)
-    tf_15 = tf_cols[0].checkbox("15m", value=True)
-    tf_30 = tf_cols[1].checkbox("30m", value=True)
-    tf_45 = tf_cols[2].checkbox("45m", value=True)
-    tf_60 = tf_cols[3].checkbox("60m", value=True)
-    selected_tfs = [t for t, on in
-                    [("15m", tf_15), ("30m", tf_30),
-                     ("45m", tf_45), ("60m", tf_60)] if on]
+    st.markdown("**Analysis Levels**")
+    lvl_cols = st.columns(4)
+    lvl_1 = lvl_cols[0].checkbox("Level 1", value=True, help="Shortest horizon")
+    lvl_2 = lvl_cols[1].checkbox("Level 2", value=True, help="Short horizon")
+    lvl_3 = lvl_cols[2].checkbox("Level 3", value=True, help="Medium horizon")
+    lvl_4 = lvl_cols[3].checkbox("Level 4", value=True, help="Long horizon")
+    selected_tfs = [tf for tf, on in
+                    [("15m", lvl_1), ("30m", lvl_2),
+                     ("45m", lvl_3), ("60m", lvl_4)] if on]
 with rc4:
     days_back = st.slider("Look-back Window (days)", 5, 30, 10, 1)
 
@@ -829,7 +864,7 @@ if "scan_out" not in st.session_state:
 
 if run_btn:
     if not selected_tfs:
-        st.error("Select at least one timeframe.")
+        st.error("Select at least one level.")
         st.stop()
     if not tickers:
         st.error("No instruments selected.")
@@ -893,19 +928,22 @@ df   = out["results_df"]
 diag = out["diag"]
 meta = st.session_state.get("scan_meta", {})
 
+levels_str = " · ".join([LEVEL_LABEL[t] for t in meta.get("timeframes", [])])
+
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Instruments Scanned", meta.get("tickers_scanned", out.get("tickers_processed", 0)))
 k2.metric("Signals Detected", len(df),
           delta=f"{df['ticker'].nunique()} unique" if len(df) else "none")
 k3.metric("Scan Duration", f"{out['scan_time_s']}s")
-k4.metric("Active Timeframes", " · ".join(meta.get("timeframes", [])))
+k4.metric("Active Levels", levels_str)
 
-tab_sig, tab_chart, tab_diag, tab_err, tab_info = st.tabs(
-    ["🎯 Signals", "📈 Chart", "📊 Analytics", "⚠ Notes", "ℹ Info"]
+tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
+    ["🎯 Signals", "📈 Chart", "📊 Analytics", "⚠ Notes"]
 )
 
+
 # ═════════════════════════════════════════════════════════
-# TAB 1 — SIGNALS (unchanged from previous version)
+# TAB 1 — SIGNALS (presentable + top 3 green)
 # ═════════════════════════════════════════════════════════
 with tab_sig:
     if df.empty:
@@ -913,57 +951,88 @@ with tab_sig:
     else:
         f1, f2, f3 = st.columns(3)
         with f1:
-            tf_f = st.multiselect("Timeframe",
-                sorted(df["timeframe"].unique().tolist()),
-                default=sorted(df["timeframe"].unique().tolist()))
+            tf_f = st.multiselect(
+                "Level",
+                options=sorted(df["timeframe"].unique().tolist()),
+                default=sorted(df["timeframe"].unique().tolist()),
+                format_func=lambda x: LEVEL_LABEL.get(x, x),
+            )
         with f2:
-            tk_f = st.multiselect("Instrument",
+            tk_f = st.multiselect(
+                "Instrument",
                 sorted(df["ticker"].unique().tolist()),
-                default=[], placeholder="All instruments")
+                default=[], placeholder="All instruments",
+            )
         with f3:
-            min_bias = st.slider("Max Bias threshold",
-                float(df["raw_di_diff"].min()), 0.0,
-                float(df["raw_di_diff"].min()))
+            min_bias = st.slider(
+                "Max Bias threshold",
+                float(df["raw_di_diff"].min()), 0.0, 0.0,
+            )
 
         filt = df[df["timeframe"].isin(tf_f) & (df["raw_di_diff"] <= min_bias)]
         if tk_f:
             filt = filt[filt["ticker"].isin(tk_f)]
         filt = filt.sort_values(["datetime", "ticker"], ascending=[False, True])
 
-        disp = filt.copy()
-        disp["datetime"] = disp["datetime"].dt.strftime("%Y-%m-%d %H:%M")
-        for c in ["close", "distance_pct", "raw_di_diff"]:
-            disp[c] = disp[c].round(2)
+        # ── Build clean display table ──────────────────
+        disp = filt.copy().reset_index(drop=True)
+        disp.insert(0, "Rank", range(1, len(disp) + 1))
+        disp["Timestamp"] = disp["datetime"].dt.strftime("%d %b %Y · %H:%M")
+        disp["Instrument"] = disp["ticker"]
+        disp["Level"] = disp["timeframe"].map(LEVEL_LABEL)
+        disp["Last Price"] = disp["close"].round(2)
+        disp["Deviation"] = disp["distance_pct"].round(2)
+        disp["Bias"] = disp["raw_di_diff"].round(2)
 
-        st.dataframe(disp, use_container_width=True, hide_index=True,
+        cols_show = ["Rank", "Timestamp", "Instrument", "Level",
+                     "Last Price", "Deviation", "Bias"]
+        disp = disp[cols_show]
+
+        # ── Highlight top 3 most recent rows green ─────
+        top3_set = set(range(min(3, len(disp))))
+
+        def _style_row(row):
+            if row.name in top3_set:
+                return (['background-color: rgba(0, 230, 118, 0.12); '
+                         'color: #00e676; font-weight: 600'] * len(row))
+            return [''] * len(row)
+
+        styled = disp.style.apply(_style_row, axis=1)
+
+        st.dataframe(
+            styled,
+            use_container_width=True,
+            hide_index=True,
             column_config={
-                "datetime": st.column_config.TextColumn("Timestamp", width="medium"),
-                "ticker": st.column_config.TextColumn("Instrument", width="small"),
-                "timeframe": st.column_config.TextColumn("TF", width="small"),
-                "close": st.column_config.NumberColumn("Last", format="%.2f"),
-                "distance_pct": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                "raw_di_diff": st.column_config.NumberColumn("Bias", format="%.2f"),
-            })
+                "Rank": st.column_config.NumberColumn("#", width="small"),
+                "Timestamp": st.column_config.TextColumn("🕐 Timestamp", width="medium"),
+                "Instrument": st.column_config.TextColumn("📊 Instrument", width="small"),
+                "Level": st.column_config.TextColumn("◈ Level", width="small"),
+                "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
+                "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
+                "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
+            },
+        )
+
+        st.caption("🟢 Green rows mark the 3 most recent signals.")
 
 
 # ═════════════════════════════════════════════════════════
-# TAB 2 — ADVANCED CHART  ⭐ REBUILT
+# TAB 2 — CHART (Level labels + Quant Score)
 # ═════════════════════════════════════════════════════════
 with tab_chart:
     if df.empty:
         st.info("No signals available — run a scan with at least one qualified hit.")
     else:
-        # ─── 1. Signal selector ─────────────────────────────
         labels = df.apply(
-            lambda r: f"{r['ticker']} · {r['timeframe']} · {r['datetime']:%d %b %Y %H:%M}",
+            lambda r: f"{r['ticker']} · {LEVEL_LABEL[r['timeframe']]} · "
+                      f"{r['datetime']:%d %b %Y %H:%M}",
             axis=1,
         ).tolist()
         pick = st.selectbox("Select a signal to analyse", labels, key="chart_pick")
         idx = labels.index(pick)
         row = df.iloc[idx]
-        sig_dt = row["datetime"]
 
-        # ─── 2. Fetch & compute context ─────────────────────
         data, ferr = cached_batch((row["ticker"],))
         if ferr or row["ticker"] not in data:
             st.error(f"Could not load data for {row['ticker']}. Try refreshing.")
@@ -989,17 +1058,16 @@ with tab_chart:
             ctx = compute_signal_context(scanned, row)
             mtf = get_current_mtf_state(raw)
 
-            # ─── 3. Quality scorecard ───────────────────────
+            # ─── Quant Scorecard ──────────────────────────
             q1, q2, q3, q4, q5 = st.columns(5)
             q1.metric("Signal Quality", f"{ctx['quality']}/100", ctx["quality_label"])
-            q2.metric("Volume Ratio", f"{ctx['vol_ratio']:.1f}×",
-                      "above 2× threshold" if ctx['vol_ratio'] >= 2 else "below threshold")
+            q2.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
+                      "high" if ctx['vol_score'] >= 50 else "moderate")
             q3.metric("Deviation", f"{ctx['dev']:.2f}%")
             q4.metric("Bias", f"{ctx['bias']:.2f}")
-            q5.metric("Bars Since", ctx["bars_since"],
-                      f"{ctx['change_since']:+.2f}%")
+            q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
 
-            # ─── 4. Main candlestick chart ─────────────────
+            # ─── Main Chart ────────────────────────────────
             st.markdown("#### Price Action · Signal Overlay")
             fig = build_pro_chart(scanned, row, ctx, window_days=7)
             if fig is not None:
@@ -1008,41 +1076,41 @@ with tab_chart:
             else:
                 st.warning("No price bars available around this signal.")
 
-            # ─── 5. Multi-timeframe alignment matrix ──────
-            st.markdown("#### Timeframe Alignment Matrix")
+            # ─── Level Alignment Matrix ────────────────────
+            st.markdown("#### Level Alignment Matrix")
             mtf_rows = []
-            for tf_name in ["15m", "30m", "45m", "60m"]:
+            for tf_name in LEVEL_ORDER:
                 state = mtf.get(tf_name)
                 if state is None:
                     mtf_rows.append({
-                        "Timeframe": tf_name, "Status": "—",
-                        "Bias": "—", "Dev %": "—", "Vol Ratio": "—",
+                        "Level": LEVEL_LABEL[tf_name], "Status": "—",
+                        "Bias": "—", "Deviation": "—", "Quant Score": "—",
                     })
                 else:
                     mtf_rows.append({
-                        "Timeframe": tf_name,
+                        "Level": LEVEL_LABEL[tf_name],
                         "Status": f"{state['icon']}  {state['status']}",
                         "Bias": round(state["bias"], 2),
-                        "Dev %": round(state["dev"], 2),
-                        "Vol Ratio": round(state["vol_ratio"], 2),
+                        "Deviation": round(state["dev"], 2),
+                        "Quant Score": round(state["vol_score"], 0),
                     })
             st.dataframe(
                 pd.DataFrame(mtf_rows),
                 use_container_width=True, hide_index=True,
                 column_config={
-                    "Timeframe": st.column_config.TextColumn("TF", width="small"),
+                    "Level": st.column_config.TextColumn("◈ Level", width="small"),
                     "Status": st.column_config.TextColumn("Status", width="medium"),
-                    "Bias": st.column_config.NumberColumn(format="%.2f"),
-                    "Dev %": st.column_config.NumberColumn(format="%.2f%%"),
-                    "Vol Ratio": st.column_config.NumberColumn(format="%.2f×"),
+                    "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
+                    "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
+                    "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
                 },
             )
 
-            # ─── 6. Automated narrative ───────────────────
+            # ─── Automated Analysis ────────────────────────
             st.markdown("#### Automated Analysis")
             st.info(generate_narrative(row, ctx, mtf))
 
-            # ─── 7. Signal timeline for this ticker ───────
+            # ─── Signal History timeline ───────────────────
             ticker_hist = df[df["ticker"] == row["ticker"]].copy()
             if len(ticker_hist) >= 1:
                 st.markdown("#### Signal History · This Instrument")
@@ -1050,7 +1118,7 @@ with tab_chart:
                 st.plotly_chart(timeline_fig, use_container_width=True,
                                 config={"displayModeBar": False})
 
-            # ─── 8. Swing context metrics ─────────────────
+            # ─── Swing Context ─────────────────────────────
             st.markdown("#### Swing Context")
             s1, s2, s3, s4 = st.columns(4)
             s1.metric("Recent High", f"{ctx['recent_high']:.2f}",
@@ -1060,27 +1128,32 @@ with tab_chart:
             s3.metric("Bars Since Signal", ctx["bars_since"])
             s4.metric("Change Since", f"{ctx['change_since']:+.2f}%")
 
-            # ─── 9. Related signals for this ticker ───────
-            related = ticker_hist.drop(ticker_hist.index[idx]
-                                       if idx in ticker_hist.index
-                                       else ticker_hist.index[0])
-            if not related.empty:
-                st.markdown("#### Related Signals · Same Instrument")
-                rel_disp = related.copy()
-                rel_disp["datetime"] = rel_disp["datetime"].dt.strftime("%Y-%m-%d %H:%M")
-                for c in ["close", "distance_pct", "raw_di_diff"]:
-                    rel_disp[c] = rel_disp[c].round(2)
-                st.dataframe(
-                    rel_disp[["datetime", "timeframe", "close", "distance_pct", "raw_di_diff"]],
-                    use_container_width=True, hide_index=True,
-                    column_config={
-                        "datetime": st.column_config.TextColumn("Timestamp", width="medium"),
-                        "timeframe": st.column_config.TextColumn("TF", width="small"),
-                        "close": st.column_config.NumberColumn("Last", format="%.2f"),
-                        "distance_pct": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                        "raw_di_diff": st.column_config.NumberColumn("Bias", format="%.2f"),
-                    },
-                )
+            # ─── Related signals ───────────────────────────
+            related = df[(df["ticker"] == row["ticker"])].copy()
+            if len(related) > 1:
+                related = related.drop(df.index[idx]) if idx in df.index else related
+                if not related.empty:
+                    st.markdown("#### Related Signals · Same Instrument")
+                    rel = related.reset_index(drop=True)
+                    rel.insert(0, "Rank", range(1, len(rel) + 1))
+                    rel["Timestamp"] = rel["datetime"].dt.strftime("%d %b %Y · %H:%M")
+                    rel["Level"] = rel["timeframe"].map(LEVEL_LABEL)
+                    rel["Last Price"] = rel["close"].round(2)
+                    rel["Deviation"] = rel["distance_pct"].round(2)
+                    rel["Bias"] = rel["raw_di_diff"].round(2)
+                    st.dataframe(
+                        rel[["Rank", "Timestamp", "Level", "Last Price",
+                             "Deviation", "Bias"]],
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Rank": st.column_config.NumberColumn("#", width="small"),
+                            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
+                            "Level": st.column_config.TextColumn("Level", width="small"),
+                            "Last Price": st.column_config.NumberColumn("Last", format="%.2f"),
+                            "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
+                            "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
+                        },
+                    )
 
 
 # ═════════════════════════════════════════════════════════
@@ -1089,8 +1162,8 @@ with tab_chart:
 with tab_diag:
     st.markdown("### Detection Funnel")
     d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Stage 1 Match", diag["stage_a"])
-    d2.metric("Stage 2 Match", diag["stage_b"])
+    d1.metric("Filter 1 Match", diag["stage_a"])
+    d2.metric("Filter 2 Match", diag["stage_b"])
     d3.metric("Qualified", diag["final"])
     d4.metric("No Data", diag["empty_data"])
     st.caption(
@@ -1111,33 +1184,12 @@ with tab_err:
                      use_container_width=True, hide_index=True)
 
 
-# ═════════════════════════════════════════════════════════
-# TAB 5 — INFO
-# ═════════════════════════════════════════════════════════
-with tab_info:
-    st.markdown("""
-### Signal Detection Suite
-
-A **multi-timeframe confluence scanner** that surfaces high-probability
-exhaustion patterns across intraday horizons.
-
-#### Coverage
-- **Timeframes:** 15m · 30m · 45m · 60m
-- **Universe:** Standard · High Volatility · Full
-- **Look-back:** Configurable 5–30 days
-
-#### Method
-Two independent stage filters must both trigger on the same bar before a
-signal qualifies. Every qualified signal is graded 0–100 on three
-dimensions: volume confirmation, exhaustion depth, and directional bias
-strength.
-
-#### Output
-- Qualified signal table with timestamp, last price, deviation, bias
-- Deep signal analytics (quality score, alignment matrix, narrative)
-- Post-signal performance tracking
-- CSV export
-
----
-*For informational purposes only. Not investment advice.*
-    """)
+# ─────────────────────────────────────────────────────────
+# FOOTER — Fintrix Branding
+# ─────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="fintrix-footer">
+    <div class="brand">Powered by {BRAND_NAME}</div>
+    <div class="tag">SIGNAL INTELLIGENCE PLATFORM</div>
+</div>
+""", unsafe_allow_html=True)
