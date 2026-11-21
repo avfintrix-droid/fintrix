@@ -70,8 +70,6 @@ SIGNAL_MARKER = "#C9A227"
 # ─────────────────────────────────────────────────────────
 BRAND_NAME = "FINTRIX ANALYTICS"
 BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
-HERO_QUOTE = "In the markets, patience is not a virtue — it is the edge."
-FOOTER_QUOTE = "Discipline compounds faster than capital."
 
 LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
@@ -215,13 +213,6 @@ html, body, [class*="css"] {
 .hero-sub {
     color: var(--text-muted); font-size: 12px;
     margin: 12px 0 0 0; letter-spacing: 0.02em;
-}
-.hero-quote {
-    margin-top: 18px; padding-top: 14px;
-    border-top: 1px solid var(--border);
-    color: var(--accent-gold); font-size: 12px;
-    font-style: italic; letter-spacing: 0.02em;
-    opacity: 0.9;
 }
 .status-pill {
     display: inline-flex; align-items: center; gap: 8px;
@@ -485,11 +476,6 @@ div[data-testid="stAlert"] p {
     letter-spacing: 0.16em; text-transform: uppercase;
     font-weight: 500;
 }
-.fintrix-footer .footer-quote {
-    color: var(--text-muted); font-size: 11px;
-    font-style: italic; margin-top: 14px;
-    letter-spacing: 0.02em; opacity: 0.85;
-}
 
 /* MOBILE */
 @media (max-width: 768px) {
@@ -510,7 +496,6 @@ div[data-testid="stAlert"] p {
     .hero-title { font-size: 18px !important; }
     .hero-eyebrow { font-size: 9px !important; }
     .hero-sub { font-size: 11px !important; }
-    .hero-quote { font-size: 11px !important; margin-top: 14px; padding-top: 12px; }
     .status-pill { font-size: 9px !important; padding: 4px 10px !important; }
     .control-card { padding: 16px 18px !important; }
     .control-title { font-size: 10px !important; margin-bottom: 14px !important; }
@@ -527,7 +512,6 @@ div[data-testid="stAlert"] p {
     .fintrix-footer { margin-top: 40px; padding-top: 24px; }
     .fintrix-footer .brand { font-size: 10px; letter-spacing: 0.16em; }
     .fintrix-footer .tag { font-size: 9px; }
-    .fintrix-footer .footer-quote { font-size: 10px; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -625,7 +609,7 @@ def ta_stdev_pop(series, length):
 
 
 # ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE (with ratio classification + absorption)
+# CORE DETECTION ENGINE
 # ─────────────────────────────────────────────────────────
 def detect_signals(df):
     if isinstance(df.columns, pd.MultiIndex):
@@ -669,53 +653,9 @@ def detect_signals(df):
     minus_di = np.where(tr_rma != 0, 100 * minus_dm_rma / tr_rma, 0.0)
     results["raw_di_diff"] = plus_di - minus_di
 
-    # ── Ratio-based pattern classification ──
-    sigma_dev = results["distance_pct"].rolling(100).std(ddof=0)
-    results["dev_z"] = results["distance_pct"] / sigma_dev
-    results["ratio"] = (results["distance_pct"].abs()
-                        / results["raw_di_diff"].abs().replace(0, np.nan)) * 100
-
-    def _classify(dev, bias, ratio):
-        if pd.isna(ratio) or abs(bias) < 15 or abs(dev) < 2:
-            return "—"
-        if ratio < 5:    return "Grind"
-        if ratio < 10:   return "Flag"
-        if ratio <= 25:  return "Absorption"
-        if ratio <= 60:  return "Exhaustion"
-        if ratio <= 100: return "Deep Exhaustion"
-        return "Spike"
-
-    results["pattern"] = results.apply(
-        lambda r: _classify(r["distance_pct"], r["raw_di_diff"], r["ratio"]),
-        axis=1)
-
-    # ── Absorption mode ──
-    prev_dev  = results["distance_pct"].shift(1)
-    prev2_dev = results["distance_pct"].shift(2)
-    low_20    = results["low"].rolling(20).min()
-
-    is_absorption = (
-        (results["pattern"] == "Absorption")
-        & (results["dev_z"] <= -1.0)
-        & (results["raw_di_diff"] < -15)
-        & (results["distance_pct"] > prev_dev)
-        & (prev_dev > prev2_dev)
-        & (results["volume"] > results["vol_ma"] * 1.2)
-        & (results["close"] > low_20 * 1.03)
-    ).fillna(False)
-
-    # ── Tightened exhaustion (σ gate) ──
-    is_exhaustion = (
-        (results["pattern"].isin(["Exhaustion", "Deep Exhaustion"]))
-        & (results["option_bottom_confirmed"])
-        & (results["raw_di_diff"] < -10)
-        & (results["dev_z"] <= -2.5)
-    ).fillna(False)
-
-    results["signal_final"] = is_absorption | is_exhaustion
-    results["mode"] = np.where(is_absorption, "Absorption",
-                      np.where(is_exhaustion, "Exhaustion", ""))
-
+    results["signal_final"] = (
+        results["option_bottom_confirmed"] & (results["raw_di_diff"] < -10)
+    )
     return results
 
 
@@ -841,8 +781,7 @@ def process_batch(batch_data, timeframes, days_back=10,
                     sigs["ticker"] = ticker
                     sigs["timeframe"] = tf_name
                     cols_out = ["datetime", "ticker", "timeframe", "close",
-                                "distance_pct", "raw_di_diff",
-                                "ratio", "pattern", "mode", "dev_z"]
+                                "distance_pct", "raw_di_diff"]
                     all_results.append(sigs[cols_out])
                     ticker_signals += len(sigs)
 
@@ -860,8 +799,7 @@ def process_batch(batch_data, timeframes, days_back=10,
         df = df[df["datetime"].dt.date >= cutoff]
     else:
         df = pd.DataFrame(columns=["datetime", "ticker", "timeframe",
-                                    "close", "distance_pct", "raw_di_diff",
-                                    "ratio", "pattern", "mode", "dev_z"])
+                                    "close", "distance_pct", "raw_di_diff"])
 
     return {
         "results_df": df,
@@ -888,41 +826,6 @@ def market_status():
 
 def to_csv_bytes(df):
     return df.to_csv(index=False).encode("utf-8")
-
-def prepare_export(df):
-    """Prepare export dataframe: drop timeframe, rename Quant / Quant X."""
-    df_exp = df.copy()
-    if "timeframe" in df_exp.columns:
-        df_exp = df_exp.drop(columns=["timeframe"])
-
-    if "datetime" in df_exp.columns:
-        df_exp["datetime"] = pd.to_datetime(df_exp["datetime"]).dt.strftime("%Y-%m-%d %H:%M")
-        df_exp = df_exp.rename(columns={"datetime": "Timestamp"})
-    if "ticker" in df_exp.columns:
-        df_exp = df_exp.rename(columns={"ticker": "Instrument"})
-    if "close" in df_exp.columns:
-        df_exp["close"] = df_exp["close"].round(2)
-        df_exp = df_exp.rename(columns={"close": "Last Price"})
-
-    df_exp = df_exp.rename(columns={
-        "distance_pct": "Quant",
-        "raw_di_diff": "Quant X",
-        "ratio": "Ratio",
-        "pattern": "Pattern",
-        "mode": "Mode",
-        "dev_z": "Dev Z",
-    })
-
-    for col in ["Quant", "Quant X", "Ratio", "Dev Z"]:
-        if col in df_exp.columns:
-            df_exp[col] = pd.to_numeric(df_exp[col], errors="coerce").round(2)
-
-    # Preferred column order
-    preferred = ["Timestamp", "Instrument", "Pattern", "Mode",
-                 "Last Price", "Quant", "Quant X", "Ratio", "Dev Z"]
-    ordered = [c for c in preferred if c in df_exp.columns]
-    rest = [c for c in df_exp.columns if c not in ordered]
-    return df_exp[ordered + rest]
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_batch(tickers_tuple):
@@ -969,21 +872,6 @@ def compute_signal_context(scanned, row):
     else:
         change_since = 0.0
 
-    pattern_val = bar["pattern"] if "pattern" in bar.index else "—"
-    mode_val = bar["mode"] if "mode" in bar.index else ""
-    ratio_val = None
-    if "ratio" in bar.index and pd.notna(bar["ratio"]):
-        try:
-            ratio_val = float(bar["ratio"])
-        except Exception:
-            ratio_val = None
-    dev_z_val = None
-    if "dev_z" in bar.index and pd.notna(bar["dev_z"]):
-        try:
-            dev_z_val = float(bar["dev_z"])
-        except Exception:
-            dev_z_val = None
-
     return {
         "vol_ratio": vol_ratio, "vol_score": vol_score,
         "dev": dev, "bias": bias,
@@ -992,10 +880,6 @@ def compute_signal_context(scanned, row):
         "bars_since": int(bars_since), "change_since": float(change_since),
         "sig_pos": int(sig_pos), "bar": bar,
         "recent_high": recent_high, "recent_low": recent_low,
-        "pattern": pattern_val,
-        "mode": mode_val,
-        "ratio": ratio_val,
-        "dev_z": dev_z_val,
     }
 
 
@@ -1108,6 +992,47 @@ def build_signal_timeline(ticker_df):
     return fig
 
 
+def generate_narrative(row, ctx, mtf):
+    ticker = row["ticker"]
+    level = LEVEL_LABEL[row["timeframe"]]
+    sig_time = row["datetime"]
+
+    aligned = [k for k, v in mtf.items() if v and v["signal"]]
+    n_aligned = len(aligned)
+
+    if n_aligned >= 3:
+        conviction = "high conviction — broad multi-level alignment"
+    elif n_aligned == 2:
+        conviction = "moderate conviction — partial level agreement"
+    elif n_aligned == 1:
+        conviction = "single-level signal — confirmation pending"
+    else:
+        conviction = "historical signal — current state has cooled"
+
+    aligned_labels = [LEVEL_LABEL[k] for k in aligned]
+
+    parts = [
+        f"**{ticker}** triggered on **{level}** at **{sig_time:%d %b %Y, %H:%M}** "
+        f"with a signal quality score of **{ctx['quality']}/100** ({ctx['quality_label']}).",
+
+        f"Price closed at **{float(ctx['bar']['close']):.2f}**, "
+        f"**{abs(ctx['dev']):.2f}%** below its 20-bar baseline, "
+        f"with a quant score of **{ctx['vol_score']:.0f}/100**. "
+        f"Directional bias printed at **{ctx['bias']:.1f}**, confirming sustained selling pressure.",
+
+        f"Level alignment: **{n_aligned} of 4** "
+        f"({', '.join(aligned_labels) if aligned_labels else 'none currently active'}) — {conviction}.",
+    ]
+
+    if ctx["bars_since"] > 0:
+        parts.append(
+            f"Price has moved **{ctx['change_since']:+.2f}%** since the signal "
+            f"({ctx['bars_since']} bars ago)."
+        )
+
+    return " ".join(parts)
+
+
 # ─────────────────────────────────────────────────────────
 # LANDING SCREEN
 # ─────────────────────────────────────────────────────────
@@ -1155,7 +1080,7 @@ if not st.session_state.get("entered"):
 
 
 # ─────────────────────────────────────────────────────────
-# HERO (with quote)
+# HERO
 # ─────────────────────────────────────────────────────────
 live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
@@ -1169,7 +1094,6 @@ st.markdown(f"""
     <div class="status-pill {pill_cls}">
         <span class="dot {dot_cls}"></span> {status_label}
     </div>
-    <div class="hero-quote">"{HERO_QUOTE}"</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1226,10 +1150,9 @@ with b4:
     if st.session_state.get("scan_out"):
         df_now = st.session_state.scan_out["results_df"]
         if not df_now.empty:
-            df_exp = prepare_export(df_now)
             st.download_button(
-                "Export", data=df_exp.to_csv(index=False).encode("utf-8"),
-                file_name=f"fintrix_signals_{datetime.now():%Y%m%d_%H%M}.csv",
+                "Export", data=to_csv_bytes(df_now),
+                file_name=f"signals_{datetime.now():%Y%m%d_%H%M}.csv",
                 mime="text/csv", use_container_width=True,
             )
 
@@ -1365,16 +1288,12 @@ with tab_sig:
         disp["Timestamp"] = disp["datetime"].dt.strftime("%d %b %Y · %H:%M")
         disp["Instrument"] = disp["ticker"]
         disp["Level"] = disp["timeframe"].map(LEVEL_LABEL)
-        disp["Pattern"] = disp.get("pattern", "—")
-        disp["Mode"] = disp.get("mode", "")
         disp["Last Price"] = disp["close"].round(2)
         disp["Deviation"] = disp["distance_pct"].round(2)
         disp["Bias"] = disp["raw_di_diff"].round(2)
-        disp["Ratio"] = disp["ratio"].round(1)
 
         cols_show = ["Rank", "Timestamp", "Instrument", "Level",
-                     "Pattern", "Mode", "Last Price", "Deviation",
-                     "Bias", "Ratio"]
+                     "Last Price", "Deviation", "Bias"]
         disp = disp[cols_show]
 
         top3 = set(range(min(3, len(disp))))
@@ -1397,12 +1316,9 @@ with tab_sig:
                 "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
                 "Instrument": st.column_config.TextColumn("Instrument", width="small"),
                 "Level": st.column_config.TextColumn("Level", width="small"),
-                "Pattern": st.column_config.TextColumn("Pattern", width="small"),
-                "Mode": st.column_config.TextColumn("Mode", width="small"),
                 "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
                 "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
                 "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
-                "Ratio": st.column_config.NumberColumn("Ratio", format="%.1f", width="small"),
             },
         )
 
@@ -1448,18 +1364,13 @@ with tab_chart:
             ctx = compute_signal_context(scanned, row)
             mtf = get_current_mtf_state(raw)
 
-            # Top metrics row (Pattern + Mode added)
-            q1, q2, q3, q4 = st.columns(4)
+            q1, q2, q3, q4, q5 = st.columns(5)
             q1.metric("Signal Quality", f"{ctx['quality']}/100", ctx["quality_label"])
-            q2.metric("Pattern", ctx.get("pattern") or "—")
-            q3.metric("Mode", ctx.get("mode") or "—")
-            q4.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
+            q2.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
                       "high" if ctx['vol_score'] >= 50 else "moderate")
-
-            q5, q6, q7 = st.columns(3)
-            q5.metric("Deviation", f"{ctx['dev']:.2f}%")
-            q6.metric("Bias", f"{ctx['bias']:.2f}")
-            q7.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
+            q3.metric("Deviation", f"{ctx['dev']:.2f}%")
+            q4.metric("Bias", f"{ctx['bias']:.2f}")
+            q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
 
             st.markdown("#### Price Action · Signal Overlay")
             fig = build_pro_chart(scanned, row, ctx, window_days=7)
@@ -1513,6 +1424,9 @@ with tab_chart:
                     "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
                 },
             )
+
+            st.markdown("#### Automated Analysis")
+            st.info(generate_narrative(row, ctx, mtf))
 
             ticker_hist = df[df["ticker"] == row["ticker"]].copy()
             if len(ticker_hist) >= 1:
@@ -1582,12 +1496,11 @@ with tab_err:
 
 
 # ─────────────────────────────────────────────────────────
-# FOOTER (with quote)
+# FOOTER
 # ─────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="fintrix-footer">
     <div class="brand">{BRAND_NAME}</div>
     <div class="tag">{BRAND_TAG}</div>
-    <div class="footer-quote">"{FOOTER_QUOTE}"</div>
 </div>
 """, unsafe_allow_html=True)
