@@ -82,14 +82,17 @@ LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Lev
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
 
 # ─────────────────────────────────────────────────────────
-# QUANT FILTER CONFIG
-#   These names are developer-facing only. In the UI,
-#   hv_stretch is displayed as "Quant H" and
-#   atr_stretch is displayed as "Quant A" for client use.
+# QUANT FILTER CONFIG — MEAN REVERSION PLAY
+#   Condition: Bias < −10 (already enforced in signal_final)
+#              AND hv_stretch  < 1.1  (Quant H)
+#              AND atr_stretch < 1.1  (Quant A)
+#   Rationale: price is overstretched below the baseline, yet
+#   short-term volatility is COMPRESSED relative to its long-term
+#   average → the stretched state is more likely to mean-revert.
 # ─────────────────────────────────────────────────────────
 QUANT_SHORT_LEN = 5
 QUANT_LONG_LEN = 20
-QUANT_THRESHOLD = 1.4
+QUANT_THRESHOLD = 1.1          # was 1.4 — now stricter compression
 
 # ─────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -696,11 +699,10 @@ def detect_signals(df):
     )
 
     # ─────────────────────────────────────────────────────
-    # QUANT VOLATILITY STRETCH
-    #   Implements Pine's "Volatility Stretch Scalper" logic:
-    #   atr_stretch  = (ATR_short/close*100) / (ATR_long/close*100)
-    #   hv_stretch   = stddev(log_ret, short)*√252 / stddev(log_ret, long)*√252
-    #   Quant filter fires when BOTH < QUANT_THRESHOLD
+    # QUANT VOLATILITY STRETCH (mean-reversion gate)
+    #   atr_stretch = (ATR_short/close*100) / (ATR_long/close*100)
+    #   hv_stretch  = stddev(log_ret, short)*√252 / stddev(log_ret, long)*√252
+    #   quant_ok    = both < QUANT_THRESHOLD (1.1)
     # ─────────────────────────────────────────────────────
     short_atr = ta_atr(high, low, close, QUANT_SHORT_LEN)
     long_atr  = ta_atr(high, low, close, QUANT_LONG_LEN)
@@ -1286,7 +1288,7 @@ k3.metric("Scan Duration", f"{out['scan_time_s']}s")
 k4.metric("Active Levels", levels_str)
 
 tab_sig, tab_quant, tab_chart, tab_diag, tab_err = st.tabs(
-    ["SIGNALS", "QUANT SCAN", "CHART", "ANALYTICS", "NOTES"]
+    ["SIGNALS", "MEAN REVERSION", "CHART", "ANALYTICS", "NOTES"]
 )
 
 
@@ -1362,21 +1364,25 @@ with tab_sig:
         st.caption("Highlighted rows mark the three most recent signals.")
 
 
-# ─── TAB 2: QUANT SCAN (NEW) ───────────────────────────
+# ─── TAB 2: MEAN REVERSION (NEW) ───────────────────────
 #   Client-facing labels: "Quant H" (internal hv_stretch)
 #                         "Quant A" (internal atr_stretch)
-#   Fires only when Bias < -10 AND Quant H < 1.4 AND Quant A < 1.4
+#   Play condition (mean reversion):
+#     Bias < −10  AND  Quant H < 1.1  AND  Quant A < 1.1
 with tab_quant:
     if df.empty or "quant_ok" not in df.columns:
-        st.info("Run a fresh scan to populate Quant filter data.")
+        st.info("Run a fresh scan to populate the mean-reversion filter.")
     else:
         qmask = df["quant_ok"].fillna(False).astype(bool)
         qdf_all = df[qmask].copy()
 
         if qdf_all.empty:
             st.info(
-                "No signals passed the Quant filter this scan. "
-                "Quant filter requires Bias < −10 AND Quant H < 1.4 AND Quant A < 1.4."
+                f"No mean-reversion plays this scan. "
+                f"Filter requires Bias < −10 AND Quant H < {QUANT_THRESHOLD} "
+                f"AND Quant A < {QUANT_THRESHOLD} simultaneously — "
+                f"i.e. price is stretched below the baseline while short-term "
+                f"volatility is compressed vs. its long-term average."
             )
         else:
             qf1, qf2 = st.columns(2)
@@ -1450,11 +1456,11 @@ with tab_quant:
                 )
 
                 st.caption(
-                    f"{len(qdf)} signal(s) passed the Quant filter — "
-                    f"Bias < −10, Quant H < {QUANT_THRESHOLD}, Quant A < {QUANT_THRESHOLD}. "
-                    f"Values below {QUANT_THRESHOLD} indicate compressed volatility, "
-                    f"typically a higher-quality reversal setup. "
-                    f"Highlighted rows mark the three most recent."
+                    f"{len(qdf)} mean-reversion play(s) — Bias < −10 with both "
+                    f"Quant H < {QUANT_THRESHOLD} and Quant A < {QUANT_THRESHOLD}. "
+                    f"Values below {QUANT_THRESHOLD} signal compressed volatility "
+                    f"vs. the long-term baseline, historically favoring a snap-back "
+                    f"toward the mean. Highlighted rows = three most recent."
                 )
 
 
@@ -1509,9 +1515,15 @@ with tab_chart:
             atr_v = ctx.get("atr_stretch", float("nan"))
             hv_disp = f"{hv_v:.3f}" if pd.notna(hv_v) else "—"
             atr_disp = f"{atr_v:.3f}" if pd.notna(atr_v) else "—"
+            mean_rev_flag = (
+                "✔ mean-reversion qualified"
+                if (pd.notna(hv_v) and pd.notna(atr_v)
+                    and hv_v < QUANT_THRESHOLD and atr_v < QUANT_THRESHOLD)
+                else "not mean-reversion qualified"
+            )
             st.caption(
                 f"Quant H: {hv_disp} · Quant A: {atr_disp} "
-                f"(Quant filter requires both < {QUANT_THRESHOLD})"
+                f"(threshold < {QUANT_THRESHOLD} each) · {mean_rev_flag}"
             )
 
             st.markdown("#### Price Action · Signal Overlay")
@@ -1617,7 +1629,7 @@ with tab_diag:
     d1.metric("Filter 1 Match", diag["stage_a"])
     d2.metric("Filter 2 Match", diag["stage_b"])
     d3.metric("Qualified", diag["final"])
-    d4.metric("Quant Filtered", diag.get("quant", 0))
+    d4.metric("Mean Reversion", diag.get("quant", 0))
     d5.metric("No Data", diag["empty_data"])
     st.caption(
         f"Window cutoff: {out['cutoff']} · Duration: {out['scan_time_s']}s · "
