@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import warnings
 import time
+import json
 import streamlit as st
 from datetime import datetime, timedelta
 import pytz
@@ -13,46 +14,29 @@ from plotly.subplots import make_subplots
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────
-# PLOTLY TEMPLATE (inlined — no external file)
+# PLOTLY TEMPLATE
 # ─────────────────────────────────────────────────────────
 PLOTLY_LAYOUT = {
     "paper_bgcolor": "rgba(0,0,0,0)",
     "plot_bgcolor": "#0B0F14",
-    "font": {
-        "family": "Inter, -apple-system, sans-serif",
-        "color": "#E5E7EB",
-        "size": 11,
-    },
-    "xaxis": {
-        "gridcolor": "#1F2937",
-        "gridwidth": 0.5,
-        "linecolor": "#1F2937",
-        "zeroline": False,
-        "tickfont": {"family": "JetBrains Mono, monospace",
-                     "color": "#9CA3AF", "size": 10},
-        "showspikes": False,
-    },
-    "yaxis": {
-        "gridcolor": "#1F2937",
-        "gridwidth": 0.5,
-        "linecolor": "#1F2937",
-        "zeroline": False,
-        "tickfont": {"family": "JetBrains Mono, monospace",
-                     "color": "#9CA3AF", "size": 10},
-        "showspikes": False,
-    },
-    "hoverlabel": {
-        "bgcolor": "#172030",
-        "bordercolor": "#1F2937",
-        "font": {"family": "JetBrains Mono, monospace",
-                 "color": "#E5E7EB", "size": 11},
-    },
-    "legend": {
-        "bgcolor": "rgba(0,0,0,0)",
-        "bordercolor": "#1F2937",
-        "font": {"family": "Inter, sans-serif",
-                 "color": "#9CA3AF", "size": 10},
-    },
+    "font": {"family": "Inter, -apple-system, sans-serif",
+             "color": "#E5E7EB", "size": 11},
+    "xaxis": {"gridcolor": "#1F2937", "gridwidth": 0.5,
+              "linecolor": "#1F2937", "zeroline": False,
+              "tickfont": {"family": "JetBrains Mono, monospace",
+                           "color": "#9CA3AF", "size": 10},
+              "showspikes": False},
+    "yaxis": {"gridcolor": "#1F2937", "gridwidth": 0.5,
+              "linecolor": "#1F2937", "zeroline": False,
+              "tickfont": {"family": "JetBrains Mono, monospace",
+                           "color": "#9CA3AF", "size": 10},
+              "showspikes": False},
+    "hoverlabel": {"bgcolor": "#172030", "bordercolor": "#1F2937",
+                   "font": {"family": "JetBrains Mono, monospace",
+                            "color": "#E5E7EB", "size": 11}},
+    "legend": {"bgcolor": "rgba(0,0,0,0)", "bordercolor": "#1F2937",
+               "font": {"family": "Inter, sans-serif",
+                        "color": "#9CA3AF", "size": 10}},
     "margin": {"l": 10, "r": 10, "t": 20, "b": 10},
     "showlegend": False,
     "hovermode": "x unified",
@@ -64,9 +48,10 @@ CANDLE_DOWN = "#EF4444"
 EMA_PRIMARY = "#00D1B2"
 EMA_SECONDARY = "#C9A227"
 SIGNAL_MARKER = "#C9A227"
+L1_LINE_COLOR = "#F59E0B"
 
 # ─────────────────────────────────────────────────────────
-# BRANDING + LEVEL MAPPING
+# BRANDING + MAPPING
 # ─────────────────────────────────────────────────────────
 BRAND_NAME = "FINTRIX ANALYTICS"
 BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
@@ -80,6 +65,8 @@ QUOTES = [
 
 LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
+
+TIER_COLORS = {"S": "#C9A227", "A": "#22C55E", "B": "#00D1B2", "C": "#9CA3AF"}
 
 # ─────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -119,18 +106,15 @@ html, body, [class*="css"] {
 }
 
 .stApp { background: var(--bg-app); }
-
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px; }
 
-/* Section labels */
 .section-label {
     font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--text-muted);
     margin-bottom: 12px;
 }
 
-/* Landing page */
 .land-wrap {
     max-width: 900px; margin: 80px auto 60px;
     text-align: center; padding: 0 24px;
@@ -165,13 +149,9 @@ html, body, [class*="css"] {
     overflow: hidden; background: var(--border);
     max-width: 560px;
 }
-.land-stat {
-    background: var(--bg-panel); padding: 20px 40px; flex: 1;
-    min-width: 150px;
-}
+.land-stat { background: var(--bg-panel); padding: 20px 40px; flex: 1; min-width: 150px; }
 .land-stat .num {
-    color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary); font-family: 'JetBrains Mono', monospace;
     font-size: 1.7rem; font-weight: 600; line-height: 1;
 }
 .land-stat .lbl {
@@ -184,9 +164,7 @@ html, body, [class*="css"] {
     background: var(--border); border: 1px solid var(--border);
     border-radius: 8px; overflow: hidden;
 }
-.land-feature {
-    background: var(--bg-panel); padding: 24px;
-}
+.land-feature { background: var(--bg-panel); padding: 24px; }
 .land-feature h4 {
     color: var(--text-primary); font-size: 0.88rem;
     margin: 0 0 8px 0; font-weight: 600;
@@ -196,7 +174,6 @@ html, body, [class*="css"] {
     margin: 0; line-height: 1.6;
 }
 
-/* Hero header */
 .hero-wrap {
     background: linear-gradient(180deg, #121821 0%, #0E131A 100%);
     border: 1px solid var(--border); border-radius: 8px;
@@ -222,16 +199,12 @@ html, body, [class*="css"] {
     margin: 12px 0 0 0; letter-spacing: 0.02em;
 }
 .hero-quote {
-    margin: 16px 0 0 0;
-    padding-top: 14px;
+    margin: 16px 0 0 0; padding-top: 14px;
     border-top: 1px solid var(--border);
-    font-size: 12px;
-    font-style: italic;
+    font-size: 12px; font-style: italic;
     color: var(--accent-gold);
-    letter-spacing: 0.02em;
-    line-height: 1.55;
+    letter-spacing: 0.02em; line-height: 1.55;
     opacity: 0.92;
-    transition: opacity 200ms ease;
 }
 .status-pill {
     display: inline-flex; align-items: center; gap: 8px;
@@ -252,7 +225,6 @@ html, body, [class*="css"] {
 .dot-live { background: var(--bullish); box-shadow: 0 0 6px var(--bullish); }
 .dot-closed { background: var(--warning); }
 
-/* Control panel */
 .control-card {
     background: var(--bg-panel);
     border: 1px solid var(--border); border-radius: 8px;
@@ -266,7 +238,6 @@ html, body, [class*="css"] {
     border-bottom: 1px solid var(--border);
 }
 
-/* Metric cards */
 [data-testid="stMetric"] {
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -297,7 +268,6 @@ html, body, [class*="css"] {
     font-size: 11px !important; font-weight: 500 !important;
 }
 
-/* Buttons */
 .stButton > button {
     border-radius: 6px; font-weight: 600; font-size: 12px;
     letter-spacing: 0.06em; text-transform: uppercase;
@@ -337,7 +307,6 @@ html, body, [class*="css"] {
     box-shadow: 0 0 16px rgba(0, 209, 178, 0.2);
 }
 
-/* Inputs */
 .stSelectbox label, .stMultiSelect label,
 .stSlider label, .stRadio label, .stTextInput label {
     color: var(--text-muted) !important;
@@ -382,7 +351,6 @@ html, body, [class*="css"] {
     letter-spacing: 0 !important;
 }
 
-/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
     gap: 0; border-bottom: 1px solid var(--border);
     padding-bottom: 0;
@@ -402,7 +370,6 @@ html, body, [class*="css"] {
     background: transparent !important;
 }
 
-/* Headings */
 h2, h3, h4 {
     color: var(--text-primary) !important;
     letter-spacing: -0.01em; font-weight: 600 !important;
@@ -412,7 +379,6 @@ h2 { font-size: 16px !important; margin-top: 1.4rem !important;
 h3 { font-size: 14px !important; }
 h4 { font-size: 13px !important; }
 
-/* Dataframes */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
@@ -446,7 +412,6 @@ h4 { font-size: 13px !important; }
     background: var(--bg-elevated) !important;
 }
 
-/* Alerts */
 div[data-testid="stAlert"] {
     border-radius: 6px;
     border: 1px solid var(--border);
@@ -459,18 +424,12 @@ div[data-testid="stAlert"] p {
     line-height: 1.6;
 }
 
-/* Progress */
-.stProgress > div > div > div > div {
-    background: var(--accent-teal) !important;
-}
-
-/* Captions */
+.stProgress > div > div > div > div { background: var(--accent-teal) !important; }
 .stCaption, [data-testid="stCaptionContainer"] {
     color: var(--text-muted) !important;
     font-size: 11px !important;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-app); }
 ::-webkit-scrollbar-thumb {
@@ -479,7 +438,6 @@ div[data-testid="stAlert"] p {
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-teal); }
 
-/* Footer */
 .fintrix-footer {
     text-align: center; margin-top: 56px;
     padding: 32px 20px 16px;
@@ -496,7 +454,6 @@ div[data-testid="stAlert"] p {
     font-weight: 500;
 }
 
-/* MOBILE */
 @media (max-width: 768px) {
     .block-container { padding-left: 0.85rem; padding-right: 0.85rem; padding-top: 1rem; }
     .land-wrap { margin: 40px auto 30px; padding: 0 16px; }
@@ -629,9 +586,9 @@ def ta_stdev_pop(series, length):
 
 
 # ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE
+# CORE DETECTION ENGINE (extended with L1 staging + boosters)
 # ─────────────────────────────────────────────────────────
-def detect_signals(df):
+def detect_signals(df, l1_threshold=-2.0):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df = df.copy()
@@ -673,9 +630,45 @@ def detect_signals(df):
     minus_di = np.where(tr_rma != 0, 100 * minus_dm_rma / tr_rma, 0.0)
     results["raw_di_diff"] = plus_di - minus_di
 
-    results["signal_final"] = (
+    # ─── Level 1 detection ───
+    results["is_L1"] = results["distance_pct"] <= l1_threshold
+    # L1 occurred in the last ~18 bars but at least 2 bars ago (excludes gap-downs)
+    results["L1_recent"] = (
+        results["is_L1"].shift(2)
+        .rolling(18, min_periods=1).max()
+        .fillna(0).astype(bool)
+    )
+
+    # ─── Volume footprint: L1 dry-up → L2 surge ───
+    results["is_L1_dry"] = results["is_L1"] & (results["volume"] < results["vol_ma"])
+    results["L1_dry_recent"] = (
+        results["is_L1_dry"].shift(2)
+        .rolling(18, min_periods=1).max()
+        .fillna(0).astype(bool)
+    )
+    results["vol_footprint"] = results["L1_dry_recent"] & results["is_vol_surge"]
+
+    # ─── Candle strength ───
+    rng = (results["high"] - results["low"]).replace(0, np.nan)
+    results["candle_pos"] = (results["close"] - results["low"]) / rng
+    results["candle_strong"] = results["candle_pos"] >= 0.4
+
+    # ─── Momentum deceleration ───
+    ret1 = results["close"].pct_change()
+    results["mom_decel"] = ret1 > ret1.shift(1)
+
+    # ─── Swing support proximity ───
+    results["atr"] = (results["high"] - results["low"]).rolling(14, min_periods=1).mean()
+    results["low_100"] = results["low"].rolling(100, min_periods=50).min()
+    dist_low_atr = (results["close"] - results["low_100"]) / results["atr"].replace(0, np.nan)
+    results["dist_to_low_atr"] = dist_low_atr
+    results["near_support"] = dist_low_atr <= 1.5
+
+    # ─── Core vs Final signal ───
+    results["signal_core"] = (
         results["option_bottom_confirmed"] & (results["raw_di_diff"] < -10)
     )
+    results["signal_final"] = results["signal_core"] & results["L1_recent"]
     return results
 
 
@@ -717,16 +710,108 @@ def batch_fetch(tickers, period="60d", interval="15m"):
 
 
 # ─────────────────────────────────────────────────────────
+# CONFLUENCE SCORING
+# ─────────────────────────────────────────────────────────
+def compute_base_quality(row):
+    vol_ma = row.get("vol_ma", np.nan)
+    vol_ratio = float(row["volume"] / vol_ma) if (vol_ma and vol_ma > 0) else 0.0
+    dev = float(row["distance_pct"])
+    bias = float(row["raw_di_diff"])
+    vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
+    dev_score = min(100.0, abs(dev) / 12.0 * 100)
+    bias_score = min(100.0, abs(bias) / 35.0 * 100)
+    quality = round(0.30 * vol_score + 0.35 * dev_score + 0.35 * bias_score)
+    return quality
+
+
+def assess_mtf_agreement(tf_scanned, sig_idx, sig_tf):
+    """Count of OTHER timeframes showing oversold state at sig_idx."""
+    agree = 0
+    details = {}
+    for other_tf, other in tf_scanned.items():
+        if other_tf == sig_tf or other is None:
+            continue
+        pos = other.index.searchsorted(sig_idx, side="right") - 1
+        if pos < 0:
+            details[other_tf] = {"dev": None, "di": None, "oversold": False}
+            continue
+        bar = other.iloc[pos]
+        dev = float(bar["distance_pct"])
+        di = float(bar["raw_di_diff"])
+        oversold = (dev <= -1.0) and (di < -5)
+        details[other_tf] = {"dev": round(dev, 2), "di": round(di, 2),
+                              "oversold": oversold}
+        if oversold:
+            agree += 1
+    return agree, details
+
+
+def compute_conviction(base_quality, mtf_agree, vol_footprint,
+                        candle_strong, mom_decel, near_support):
+    score = 0
+    score += min(20, base_quality * 0.20)
+    score += 25 if mtf_agree >= 2 else (15 if mtf_agree == 1 else 0)
+    score += 15 if vol_footprint else 0
+    score += 15 if candle_strong else 0
+    score += 10 if mom_decel else 0
+    score += 15 if near_support else 0
+    return round(score)
+
+
+def score_to_tier(booster_pts):
+    if booster_pts >= 6: return "S"
+    if booster_pts >= 5: return "A"
+    if booster_pts >= 4: return "B"
+    if booster_pts >= 3: return "C"
+    return "—"
+
+
+def compute_outcome(scanned, sig_pos, holding_bars=20):
+    """Simple outcome: entry=signal close, stop=bar low-0.5 ATR, target=entry+1R."""
+    if sig_pos + holding_bars >= len(scanned):
+        return {"status": "Pending", "r": None}
+    try:
+        entry = float(scanned.iloc[sig_pos]["close"])
+        atr = float(scanned.iloc[sig_pos].get("atr", np.nan))
+        if pd.isna(atr) or atr <= 0:
+            atr = entry * 0.01
+        stop = float(scanned.iloc[sig_pos]["low"]) - 0.5 * atr
+        risk = entry - stop
+        if risk <= 0:
+            return {"status": "Invalid", "r": None}
+
+        window = scanned.iloc[sig_pos + 1: sig_pos + holding_bars + 1]
+        if window.empty:
+            return {"status": "Pending", "r": None}
+
+        max_high = float(window["high"].max())
+        min_low = float(window["low"].min())
+
+        if min_low <= stop:
+            return {"status": "Stop Hit", "r": -1.0}
+
+        target = entry + risk  # 1R
+        if max_high >= target:
+            return {"status": "Target Hit", "r": round((max_high - entry) / risk, 2)}
+
+        return {"status": "Open",
+                "r": round((max_high - entry) / risk, 2) if max_high > entry else 0.0}
+    except Exception:
+        return {"status": "Pending", "r": None}
+
+
+# ─────────────────────────────────────────────────────────
 # PROCESS BATCH
 # ─────────────────────────────────────────────────────────
-def process_batch(batch_data, timeframes, days_back=10,
-                  progress_cb=None, ticker_cb=None):
+def process_batch(batch_data, timeframes, days_back=10, l1_threshold=-2.0,
+                  min_boosters=3, progress_cb=None, ticker_cb=None):
     t0 = time.time()
     tf_map = [(tf, TIMEFRAME_MAP[tf]) for tf in timeframes if tf in TIMEFRAME_MAP]
 
     all_results = []
     errors = []
-    diag_total = {"empty_data": 0, "stage_a": 0, "stage_b": 0, "final": 0}
+    diag_total = {"empty_data": 0, "stage_core": 0, "stage_final": 0,
+                  "tier_counts": {"S": 0, "A": 0, "B": 0, "C": 0}}
 
     ist = pytz.timezone("Asia/Kolkata")
     cutoff = (datetime.now(ist) - timedelta(days=days_back)).date()
@@ -750,7 +835,6 @@ def process_batch(batch_data, timeframes, days_back=10,
 
             if not isinstance(raw.index, pd.DatetimeIndex):
                 raw.index = pd.to_datetime(raw.index)
-
             if raw.index.tz is None:
                 raw.index = raw.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
             else:
@@ -772,38 +856,96 @@ def process_batch(batch_data, timeframes, days_back=10,
                 if progress_cb: progress_cb(i / total)
                 continue
 
-            ticker_signals = 0
+            # Pre-scan all selected TFs once
+            tf_scanned = {}
             for tf_name, resample_rule in tf_map:
-                resampled = raw.resample(
-                    resample_rule, origin="start_day", offset="9h15min",
-                    label="left", closed="left",
-                ).agg({
-                    "open": "first", "high": "max",
-                    "low": "min", "close": "last", "volume": "sum",
-                }).dropna()
+                try:
+                    resampled = raw.resample(
+                        resample_rule, origin="start_day", offset="9h15min",
+                        label="left", closed="left",
+                    ).agg({
+                        "open": "first", "high": "max",
+                        "low": "min", "close": "last", "volume": "sum",
+                    }).dropna()
 
-                if len(resampled) < 100:
+                    if len(resampled) < 100:
+                        tf_scanned[tf_name] = None
+                        continue
+                    if is_live_market and len(resampled) > 1:
+                        resampled = resampled.iloc[:-1]
+                    tf_scanned[tf_name] = detect_signals(resampled, l1_threshold)
+                except Exception:
+                    tf_scanned[tf_name] = None
+
+            ticker_signals = 0
+            for tf_name, scanned in tf_scanned.items():
+                if scanned is None:
                     continue
 
-                if is_live_market and len(resampled) > 1:
-                    resampled = resampled.iloc[:-1]
-
-                scanned = detect_signals(resampled)
-
-                diag_total["stage_a"] += int(scanned["option_bottom_confirmed"].sum())
-                diag_total["stage_b"] += int((scanned["raw_di_diff"] < -10).sum())
-                diag_total["final"] += int(scanned["signal_final"].sum())
+                diag_total["stage_core"] += int(scanned["signal_core"].sum())
+                diag_total["stage_final"] += int(scanned["signal_final"].sum())
 
                 sigs = scanned[scanned["signal_final"]].copy()
-                if not sigs.empty:
-                    idx_name = sigs.index.name or "datetime"
-                    sigs = sigs.reset_index().rename(columns={idx_name: "datetime"})
-                    sigs["ticker"] = ticker
-                    sigs["timeframe"] = tf_name
-                    cols_out = ["datetime", "ticker", "timeframe", "close",
-                                "distance_pct", "raw_di_diff"]
-                    all_results.append(sigs[cols_out])
-                    ticker_signals += len(sigs)
+                if sigs.empty:
+                    continue
+
+                for sig_idx in sigs.index:
+                    sig_row = scanned.loc[sig_idx]
+                    try:
+                        sig_pos = scanned.index.get_loc(sig_idx)
+                    except Exception:
+                        continue
+
+                    base_q = compute_base_quality(sig_row)
+                    mtf_agree, mtf_details = assess_mtf_agreement(
+                        tf_scanned, sig_idx, tf_name
+                    )
+
+                    vol_fp = bool(sig_row["vol_footprint"])
+                    candle_strong = bool(sig_row["candle_strong"])
+                    mom_decel = bool(sig_row["mom_decel"])
+                    near_sup = bool(sig_row["near_support"])
+
+                    booster_pts = (
+                        (2 if mtf_agree >= 2 else (1 if mtf_agree == 1 else 0)) +
+                        (1 if vol_fp else 0) +
+                        (1 if candle_strong else 0) +
+                        (1 if mom_decel else 0) +
+                        (1 if near_sup else 0)
+                    )
+                    tier = score_to_tier(booster_pts)
+
+                    if tier == "—" or booster_pts < min_boosters:
+                        continue
+
+                    conviction = compute_conviction(
+                        base_q, mtf_agree, vol_fp, candle_strong, mom_decel, near_sup
+                    )
+
+                    outcome = compute_outcome(scanned, sig_pos)
+                    diag_total["tier_counts"][tier] += 1
+
+                    all_results.append({
+                        "datetime": sig_idx,
+                        "ticker": ticker,
+                        "timeframe": tf_name,
+                        "close": float(sig_row["close"]),
+                        "distance_pct": float(sig_row["distance_pct"]),
+                        "raw_di_diff": float(sig_row["raw_di_diff"]),
+                        "tier": tier,
+                        "conviction": int(conviction),
+                        "booster_pts": int(booster_pts),
+                        "base_quality": int(base_q),
+                        "mtf_agree": int(mtf_agree),
+                        "vol_footprint": vol_fp,
+                        "candle_strong": candle_strong,
+                        "mom_decel": mom_decel,
+                        "near_support": near_sup,
+                        "mtf_details": json.dumps(mtf_details),
+                        "outcome_status": outcome["status"],
+                        "outcome_r": outcome["r"],
+                    })
+                    ticker_signals += 1
 
             if ticker_cb: ticker_cb(ticker, ticker_signals)
 
@@ -815,11 +957,16 @@ def process_batch(batch_data, timeframes, days_back=10,
     elapsed = round(time.time() - t0, 1)
 
     if all_results:
-        df = pd.concat(all_results, ignore_index=True)
+        df = pd.DataFrame(all_results)
         df = df[df["datetime"].dt.date >= cutoff]
+        df = df.sort_values("datetime", ascending=False).reset_index(drop=True)
     else:
-        df = pd.DataFrame(columns=["datetime", "ticker", "timeframe",
-                                    "close", "distance_pct", "raw_di_diff"])
+        df = pd.DataFrame(columns=[
+            "datetime", "ticker", "timeframe", "close", "distance_pct",
+            "raw_di_diff", "tier", "conviction", "booster_pts", "base_quality",
+            "mtf_agree", "vol_footprint", "candle_strong", "mom_decel",
+            "near_support", "mtf_details", "outcome_status", "outcome_r"
+        ])
 
     return {
         "results_df": df,
@@ -844,13 +991,15 @@ def market_status():
     )
     return (True, "SESSION LIVE") if in_session else (False, "SESSION CLOSED")
 
+
 def to_csv_bytes(df):
-    """Export only Stock Name, Dev % and Bias (renamed headers)."""
+    """Export: Stock Name, Dev %, Bias only (as requested)."""
     if df is None or df.empty:
         return b""
     exp = df[["ticker", "distance_pct", "raw_di_diff"]].copy()
     exp.columns = ["Stock Name", "Dev %", "Bias"]
     return exp.to_csv(index=False).encode("utf-8")
+
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_batch(tickers_tuple):
@@ -858,7 +1007,7 @@ def cached_batch(tickers_tuple):
 
 
 # ─────────────────────────────────────────────────────────
-# ANALYTICS
+# SIGNAL CONTEXT (for CHART tab)
 # ─────────────────────────────────────────────────────────
 def compute_signal_context(scanned, row):
     sig_dt = row["datetime"]
@@ -886,9 +1035,9 @@ def compute_signal_context(scanned, row):
 
     lookback = scanned.iloc[max(0, sig_pos - 100):sig_pos + 1]
     recent_high = float(lookback["high"].max())
-    recent_low  = float(lookback["low"].min())
+    recent_low = float(lookback["low"].min())
     dist_from_high = (float(bar["close"]) - recent_high) / recent_high * 100
-    dist_from_low  = (float(bar["close"]) - recent_low) / recent_low * 100
+    dist_from_low = (float(bar["close"]) - recent_low) / recent_low * 100
 
     bars_since = len(scanned) - 1 - sig_pos
     if sig_pos < len(scanned) - 1:
@@ -896,6 +1045,13 @@ def compute_signal_context(scanned, row):
         change_since = (current_close - float(bar["close"])) / float(bar["close"]) * 100
     else:
         change_since = 0.0
+
+    # Booster checklist info (recompute for display)
+    candle_pos = float(bar.get("candle_pos", np.nan))
+    mom_decel = bool(bar.get("mom_decel", False))
+    near_support = bool(bar.get("near_support", False))
+    vol_fp = bool(bar.get("vol_footprint", False))
+    dist_low_atr = float(bar.get("dist_to_low_atr", np.nan))
 
     return {
         "vol_ratio": vol_ratio, "vol_score": vol_score,
@@ -905,587 +1061,16 @@ def compute_signal_context(scanned, row):
         "bars_since": int(bars_since), "change_since": float(change_since),
         "sig_pos": int(sig_pos), "bar": bar,
         "recent_high": recent_high, "recent_low": recent_low,
+        "candle_pos": candle_pos,
+        "mom_decel": mom_decel,
+        "near_support": near_support,
+        "vol_footprint": vol_fp,
+        "dist_to_low_atr": dist_low_atr,
     }
 
 
-def get_current_mtf_state(raw):
+def get_current_mtf_state(raw, l1_threshold=-2.0):
     result = {}
     for tf_name, rule in TIMEFRAME_MAP.items():
         try:
-            rs = raw.resample(rule, origin="start_day", offset="9h15min",
-                              label="left", closed="left").agg({
-                                  "open": "first", "high": "max", "low": "min",
-                                  "close": "last", "volume": "sum"}).dropna()
-            if len(rs) < 100:
-                result[tf_name] = None
-                continue
-            scanned = detect_signals(rs)
-            last = scanned.iloc[-1]
-            vma = last.get("vol_ma", np.nan)
-            vol_ratio = float(last["volume"] / vma) if (vma and vma > 0) else 0.0
-            vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
-
-            if bool(last["signal_final"]):
-                status = "Active"
-            elif bool(last["option_bottom_confirmed"]):
-                status = "Exhaustion"
-            elif float(last["raw_di_diff"]) < -10:
-                status = "Bias Only"
-            else:
-                status = "Quiet"
-
-            result[tf_name] = {
-                "status": status,
-                "signal": bool(last["signal_final"]),
-                "bias": float(last["raw_di_diff"]),
-                "dev": float(last["distance_pct"]),
-                "vol_ratio": vol_ratio, "vol_score": vol_score,
-            }
-        except Exception:
-            result[tf_name] = None
-    return result
-
-
-def build_pro_chart(scanned, row, ctx, window_days=7):
-    sig_dt = row["datetime"]
-    start = sig_dt - pd.Timedelta(days=window_days)
-    end   = sig_dt + pd.Timedelta(days=2)
-    win = scanned.loc[(scanned.index >= start) & (scanned.index <= end)].copy()
-    if win.empty:
-        return None
-
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        vertical_spacing=0.04, row_heights=[0.74, 0.26])
-
-    fig.add_trace(go.Candlestick(
-        x=win.index, open=win["open"], high=win["high"],
-        low=win["low"], close=win["close"], name="Price",
-        increasing_line_color=CANDLE_UP, decreasing_line_color=CANDLE_DOWN,
-        increasing_fillcolor="rgba(34,197,94,0.35)",
-        decreasing_fillcolor="rgba(239,68,68,0.35)",
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=win.index, y=win["ema_value"], name="Baseline",
-        line=dict(color=EMA_PRIMARY, width=1.5), opacity=0.9,
-        hovertemplate="Baseline: %{y:.2f}<extra></extra>",
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=[sig_dt], y=[float(ctx["bar"]["close"])],
-        mode="markers",
-        marker=dict(symbol="diamond", size=14, color=SIGNAL_MARKER,
-                    line=dict(color="#E5E7EB", width=1.5)),
-        name="Signal", hoverinfo="skip", showlegend=False,
-    ), row=1, col=1)
-
-    colors = [CANDLE_UP if c >= o else CANDLE_DOWN
-              for o, c in zip(win["open"], win["close"])]
-    fig.add_trace(go.Bar(
-        x=win.index, y=win["volume"], name="Volume",
-        marker_color=colors, marker_line_width=0, opacity=0.65,
-    ), row=2, col=1)
-
-    fig.update_layout(height=520, **PLOTLY_LAYOUT)
-    fig.update_xaxes(rangeslider_visible=False)
-    fig.update_yaxes(title_text="Price", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1)
-    return fig
-
-
-def build_signal_timeline(ticker_df):
-    fig = go.Figure()
-    level_colors = {
-        "15m": "#00D1B2", "30m": "#22C55E",
-        "45m": "#C9A227", "60m": "#9CA3AF",
-    }
-    for tf in LEVEL_ORDER:
-        sub = ticker_df[ticker_df["timeframe"] == tf]
-        if sub.empty:
-            continue
-        fig.add_trace(go.Scatter(
-            x=sub["datetime"], y=[LEVEL_LABEL[tf]] * len(sub),
-            mode="markers",
-            marker=dict(size=11, color=level_colors[tf],
-                        line=dict(color="#0B0F14", width=1)),
-            name=LEVEL_LABEL[tf],
-            hovertemplate=f"{LEVEL_LABEL[tf]}<br>%{{x|%d %b %H:%M}}<extra></extra>",
-        ))
-    fig.update_layout(height=160, **PLOTLY_LAYOUT)
-    fig.update_yaxes(categoryorder="array",
-                     categoryarray=[LEVEL_LABEL[t] for t in reversed(LEVEL_ORDER)])
-    return fig
-
-
-# ─────────────────────────────────────────────────────────
-# LANDING SCREEN
-# ─────────────────────────────────────────────────────────
-if not st.session_state.get("entered"):
-    st.markdown(f"""
-    <div class="land-wrap">
-        <div class="land-eyebrow">{BRAND_TAG}</div>
-        <h1 class="land-title">{BRAND_NAME}</h1>
-        <p class="land-tagline">Institutional-Grade Signal Discovery</p>
-        <p class="land-sub">
-            A multi-level confluence engine that surfaces high-probability
-            exhaustion patterns across four intraday analysis horizons.
-        </p>
-        <div class="land-stats">
-            <div class="land-stat"><div class="num">04</div><div class="lbl">Levels</div></div>
-            <div class="land-stat"><div class="num">02</div><div class="lbl">Stage Filters</div></div>
-            <div class="land-stat"><div class="num">250+</div><div class="lbl">Instruments</div></div>
-        </div>
-        <div class="land-features">
-            <div class="land-feature">
-                <h4>Multi-Level Confluence</h4>
-                <p>Independent detection across four horizons ensures only
-                   durable signals reach the surface.</p>
-            </div>
-            <div class="land-feature">
-                <h4>Quant Scoring</h4>
-                <p>Every signal is graded 0–100 on quant, exhaustion depth,
-                   and directional bias strength.</p>
-            </div>
-            <div class="land-feature">
-                <h4>Deep Analytics</h4>
-                <p>Candlestick overlays, level alignment matrix, and
-                   automated analysis for every qualified hit.</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    _, c, _ = st.columns([1, 1, 1])
-    with c:
-        if st.button("ENTER PLATFORM", use_container_width=True, type="primary"):
-            st.session_state.entered = True
-            st.rerun()
-    st.stop()
-
-
-# ─────────────────────────────────────────────────────────
-# HERO (with rotating quote)
-# ─────────────────────────────────────────────────────────
-live, status_label = market_status()
-pill_cls = "status-live" if live else "status-closed"
-dot_cls  = "dot-live" if live else "dot-closed"
-
-# Rotate quote roughly every 30 seconds (changes on rerun / refresh)
-_rotating_quote = QUOTES[int(time.time() // 30) % len(QUOTES)]
-
-st.markdown(f"""
-<div class="hero-wrap">
-    <div class="hero-eyebrow">{BRAND_TAG}</div>
-    <div class="hero-title">{BRAND_NAME}</div>
-    <p class="hero-sub">Multi-level confluence engine · Four intraday analysis horizons</p>
-    <div class="status-pill {pill_cls}">
-        <span class="dot {dot_cls}"></span> {status_label}
-    </div>
-    <p class="hero-quote">“{_rotating_quote}”</p>
-</div>
-""", unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────────────────
-# CONTROL PANEL
-# ─────────────────────────────────────────────────────────
-st.markdown('<div class="control-card">', unsafe_allow_html=True)
-st.markdown('<div class="control-title">Scan Configuration</div>', unsafe_allow_html=True)
-
-rc1, rc2 = st.columns([2, 1])
-with rc1:
-    universe = st.radio(
-        "Instrument Universe",
-        ["Standard (~190)", "High Volatility (~60)", "Full (~250)"],
-        index=2, horizontal=True,
-    )
-    if universe.startswith("Standard"):
-        base = [t.replace(".NS", "") for t in STANDARD_SYMBOLS]
-    elif universe.startswith("High"):
-        base = [t.replace(".NS", "") for t in HIGH_VOL_SYMBOLS]
-    else:
-        base = ALL_SYMBOLS
-with rc2:
-    max_tickers = st.slider(
-        "Max Instruments", min_value=10, max_value=len(base),
-        value=len(base), step=10,
-    )
-tickers = base[:max_tickers]
-
-rc3, rc4 = st.columns([3, 2])
-with rc3:
-    st.markdown('<div class="section-label">Analysis Levels</div>', unsafe_allow_html=True)
-    lvl_cols = st.columns(4)
-    lvl_1 = lvl_cols[0].checkbox("Level 1", value=True)
-    lvl_2 = lvl_cols[1].checkbox("Level 2", value=True)
-    lvl_3 = lvl_cols[2].checkbox("Level 3", value=True)
-    lvl_4 = lvl_cols[3].checkbox("Level 4", value=True)
-    selected_tfs = [tf for tf, on in
-                    [("15m", lvl_1), ("30m", lvl_2),
-                     ("45m", lvl_3), ("60m", lvl_4)] if on]
-with rc4:
-    days_back = st.slider("Look-back Window (days)", 5, 30, 10, 1)
-
-st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-b1, b2, b3, b4 = st.columns([2, 1, 1, 1])
-with b1:
-    run_btn = st.button("RUN SCAN", use_container_width=True, type="primary")
-with b2:
-    refresh_btn = st.button("Refresh", use_container_width=True)
-with b3:
-    clear_btn = st.button("Clear", use_container_width=True)
-with b4:
-    if st.session_state.get("scan_out"):
-        df_now = st.session_state.scan_out["results_df"]
-        if not df_now.empty:
-            st.download_button(
-                "Export", data=to_csv_bytes(df_now),
-                file_name=f"signals_{datetime.now():%Y%m%d_%H%M}.csv",
-                mime="text/csv", use_container_width=True,
-            )
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-if clear_btn:
-    st.session_state.scan_out = None
-    st.rerun()
-
-if refresh_btn:
-    st.cache_data.clear()
-    st.session_state.scan_out = None
-    st.success("Cache cleared. Next scan will pull fresh data.")
-
-
-# ─────────────────────────────────────────────────────────
-# RUN SCAN
-# ─────────────────────────────────────────────────────────
-if "scan_out" not in st.session_state:
-    st.session_state.scan_out = None
-
-if run_btn:
-    if not selected_tfs:
-        st.error("Select at least one level.")
-        st.stop()
-    if not tickers:
-        st.error("No instruments selected.")
-        st.stop()
-
-    fetch_slot = st.empty()
-    fetch_slot.info(f"Fetching data for {len(tickers)} instruments…")
-    batch_data, fetch_err = cached_batch(tuple(tickers))
-
-    if fetch_err:
-        fetch_slot.empty()
-        st.error(f"Fetch failed: {fetch_err}")
-        st.stop()
-    if not batch_data:
-        fetch_slot.empty()
-        st.error("No data returned. Try Refresh and scan again.")
-        st.stop()
-
-    fetch_slot.success(f"{len(batch_data)}/{len(tickers)} instruments loaded. Processing…")
-    progress = st.progress(0.0, text="Detecting signals…")
-    status_slot = st.empty()
-
-    def _prog(p):
-        progress.progress(min(p, 1.0), text=f"Scanning… {int(p*100)}%")
-
-    def _tick(name, n):
-        if n > 0:
-            status_slot.success(f"{name} — {n} qualified")
-        else:
-            status_slot.info(f"{name}")
-
-    out = process_batch(batch_data, selected_tfs, days_back=days_back,
-                        progress_cb=_prog, ticker_cb=_tick)
-    progress.empty()
-    status_slot.empty()
-    fetch_slot.empty()
-
-    st.session_state.scan_out = out
-    st.session_state.scan_meta = {
-        "tickers_scanned": len(batch_data),
-        "timeframes": selected_tfs,
-        "days_back": days_back,
-    }
-    st.success(
-        f"Scan complete — {len(out['results_df'])} signal(s) "
-        f"across {len(batch_data)} instruments in {out['scan_time_s']}s."
-    )
-
-
-# ─────────────────────────────────────────────────────────
-# RESULTS
-# ─────────────────────────────────────────────────────────
-out = st.session_state.scan_out
-
-if out is None:
-    st.info("Configure the scan above, then click RUN SCAN.")
-    st.stop()
-
-df   = out["results_df"]
-diag = out["diag"]
-meta = st.session_state.get("scan_meta", {})
-
-levels_str = " · ".join([LEVEL_LABEL[t] for t in meta.get("timeframes", [])])
-
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Instruments Scanned", meta.get("tickers_scanned", out.get("tickers_processed", 0)))
-k2.metric("Signals Detected", len(df),
-          delta=f"{df['ticker'].nunique()} unique" if len(df) else "none")
-k3.metric("Scan Duration", f"{out['scan_time_s']}s")
-k4.metric("Active Levels", levels_str)
-
-tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
-    ["SIGNALS", "CHART", "ANALYTICS", "NOTES"]
-)
-
-
-# ─── TAB 1: SIGNALS ─────────────────────────────────────
-with tab_sig:
-    if df.empty:
-        st.info(f"No signals detected in the last {meta.get('days_back', 10)} days.")
-    else:
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            tf_f = st.multiselect(
-                "Level",
-                options=sorted(df["timeframe"].unique().tolist()),
-                default=sorted(df["timeframe"].unique().tolist()),
-                format_func=lambda x: LEVEL_LABEL.get(x, x),
-            )
-        with f2:
-            tk_f = st.multiselect(
-                "Instrument",
-                sorted(df["ticker"].unique().tolist()),
-                default=[], placeholder="All instruments",
-            )
-        with f3:
-            min_bias = st.slider(
-                "Max Bias Threshold",
-                float(df["raw_di_diff"].min()), 0.0, 0.0,
-            )
-
-        filt = df[df["timeframe"].isin(tf_f) & (df["raw_di_diff"] <= min_bias)]
-        if tk_f:
-            filt = filt[filt["ticker"].isin(tk_f)]
-        filt = filt.sort_values(["datetime", "ticker"], ascending=[False, True])
-
-        disp = filt.copy().reset_index(drop=True)
-        disp.insert(0, "Rank", range(1, len(disp) + 1))
-        disp["Timestamp"] = disp["datetime"].dt.strftime("%d %b %Y · %H:%M")
-        disp["Instrument"] = disp["ticker"]
-        disp["Level"] = disp["timeframe"].map(LEVEL_LABEL)
-        disp["Last Price"] = disp["close"].round(2)
-        disp["Deviation"] = disp["distance_pct"].round(2)
-        disp["Bias"] = disp["raw_di_diff"].round(2)
-
-        cols_show = ["Rank", "Timestamp", "Instrument", "Level",
-                     "Last Price", "Deviation", "Bias"]
-        disp = disp[cols_show]
-
-        top3 = set(range(min(3, len(disp))))
-
-        def _style_row(row):
-            styles = [''] * len(row)
-            if row.name in top3:
-                styles = ['background-color: rgba(34, 197, 94, 0.10); '
-                          'color: #22C55E; font-weight: 600'] * len(row)
-            return styles
-
-        styled = disp.style.apply(_style_row, axis=1)
-
-        st.dataframe(
-            styled,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Rank": st.column_config.NumberColumn("#", width="small"),
-                "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
-                "Instrument": st.column_config.TextColumn("Instrument", width="small"),
-                "Level": st.column_config.TextColumn("Level", width="small"),
-                "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
-                "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
-                "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
-            },
-        )
-
-        st.caption("Highlighted rows mark the three most recent signals.")
-
-
-# ─── TAB 2: CHART ───────────────────────────────────────
-with tab_chart:
-    if df.empty:
-        st.info("No signals available — run a scan with at least one qualified hit.")
-    else:
-        labels = df.apply(
-            lambda r: f"{r['ticker']} · {LEVEL_LABEL[r['timeframe']]} · "
-                      f"{r['datetime']:%d %b %Y %H:%M}",
-            axis=1,
-        ).tolist()
-        pick = st.selectbox("Select a signal", labels, key="chart_pick")
-        idx = labels.index(pick)
-        row = df.iloc[idx]
-
-        data, ferr = cached_batch((row["ticker"],))
-        if ferr or row["ticker"] not in data:
-            st.error(f"Could not load data for {row['ticker']}. Try refreshing.")
-        else:
-            raw = data[row["ticker"]].copy()
-            if not isinstance(raw.index, pd.DatetimeIndex):
-                raw.index = pd.to_datetime(raw.index)
-            if raw.index.tz is None:
-                raw.index = raw.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
-            else:
-                raw.index = raw.index.tz_convert("Asia/Kolkata")
-
-            rule = TIMEFRAME_MAP[row["timeframe"]]
-            rs = raw.resample(
-                rule, origin="start_day", offset="9h15min",
-                label="left", closed="left",
-            ).agg({
-                "open": "first", "high": "max", "low": "min",
-                "close": "last", "volume": "sum",
-            }).dropna()
-
-            scanned = detect_signals(rs)
-            ctx = compute_signal_context(scanned, row)
-            mtf = get_current_mtf_state(raw)
-
-            q1, q2, q3, q4, q5 = st.columns(5)
-            q1.metric("Signal Quality", f"{ctx['quality']}/100", ctx["quality_label"])
-            q2.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
-                      "high" if ctx['vol_score'] >= 50 else "moderate")
-            q3.metric("Deviation", f"{ctx['dev']:.2f}%")
-            q4.metric("Bias", f"{ctx['bias']:.2f}")
-            q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
-
-            st.markdown("#### Price Action · Signal Overlay")
-            fig = build_pro_chart(scanned, row, ctx, window_days=7)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True,
-                                config={"displayModeBar": True, "displaylogo": False})
-            else:
-                st.warning("No price bars available around this signal.")
-
-            st.markdown("#### Level Alignment Matrix")
-            mtf_rows = []
-            for tf_name in LEVEL_ORDER:
-                state = mtf.get(tf_name)
-                if state is None:
-                    mtf_rows.append({
-                        "Level": LEVEL_LABEL[tf_name], "Status": "—",
-                        "Bias": "—", "Deviation": "—", "Quant Score": "—",
-                    })
-                else:
-                    mtf_rows.append({
-                        "Level": LEVEL_LABEL[tf_name],
-                        "Status": state["status"],
-                        "Bias": round(state["bias"], 2),
-                        "Deviation": round(state["dev"], 2),
-                        "Quant Score": round(state["vol_score"], 0),
-                    })
-            mtf_df = pd.DataFrame(mtf_rows)
-
-            def _style_status(val):
-                v = str(val)
-                if v == "Active":
-                    return "background-color: rgba(34,197,94,0.12); color: #22C55E; font-weight: 600;"
-                if v == "Exhaustion":
-                    return "background-color: rgba(245,158,11,0.12); color: #F59E0B; font-weight: 600;"
-                if v == "Bias Only":
-                    return "background-color: rgba(0,209,178,0.10); color: #00D1B2; font-weight: 600;"
-                if v == "Quiet":
-                    return "color: #9CA3AF;"
-                return ""
-
-            styled_mtf = mtf_df.style.map(_style_status, subset=["Status"])
-
-            st.dataframe(
-                styled_mtf,
-                use_container_width=True, hide_index=True,
-                column_config={
-                    "Level": st.column_config.TextColumn("Level", width="small"),
-                    "Status": st.column_config.TextColumn("Status", width="medium"),
-                    "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
-                    "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                    "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
-                },
-            )
-
-            ticker_hist = df[df["ticker"] == row["ticker"]].copy()
-            if len(ticker_hist) >= 1:
-                st.markdown("#### Signal History · This Instrument")
-                timeline_fig = build_signal_timeline(ticker_hist)
-                st.plotly_chart(timeline_fig, use_container_width=True,
-                                config={"displayModeBar": False})
-
-            st.markdown("#### Swing Context")
-            s1, s2, s3, s4 = st.columns(4)
-            s1.metric("Recent High", f"{ctx['recent_high']:.2f}",
-                      f"{ctx['dist_from_high']:.2f}%")
-            s2.metric("Recent Low", f"{ctx['recent_low']:.2f}",
-                      f"{ctx['dist_from_low']:+.2f}%")
-            s3.metric("Bars Since Signal", ctx["bars_since"])
-            s4.metric("Change Since", f"{ctx['change_since']:+.2f}%")
-
-            related = df[(df["ticker"] == row["ticker"])].copy()
-            if len(related) > 1:
-                related = related.drop(df.index[idx]) if idx in df.index else related
-                if not related.empty:
-                    st.markdown("#### Related Signals · Same Instrument")
-                    rel = related.reset_index(drop=True)
-                    rel.insert(0, "Rank", range(1, len(rel) + 1))
-                    rel["Timestamp"] = rel["datetime"].dt.strftime("%d %b %Y · %H:%M")
-                    rel["Level"] = rel["timeframe"].map(LEVEL_LABEL)
-                    rel["Last Price"] = rel["close"].round(2)
-                    rel["Deviation"] = rel["distance_pct"].round(2)
-                    rel["Bias"] = rel["raw_di_diff"].round(2)
-                    st.dataframe(
-                        rel[["Rank", "Timestamp", "Level", "Last Price",
-                             "Deviation", "Bias"]],
-                        use_container_width=True, hide_index=True,
-                        column_config={
-                            "Rank": st.column_config.NumberColumn("#", width="small"),
-                            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
-                            "Level": st.column_config.TextColumn("Level", width="small"),
-                            "Last Price": st.column_config.NumberColumn("Last", format="%.2f"),
-                            "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                            "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
-                        },
-                    )
-
-
-# ─── TAB 3: ANALYTICS ───────────────────────────────────
-with tab_diag:
-    st.markdown("### Detection Funnel")
-    d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Filter 1 Match", diag["stage_a"])
-    d2.metric("Filter 2 Match", diag["stage_b"])
-    d3.metric("Qualified", diag["final"])
-    d4.metric("No Data", diag["empty_data"])
-    st.caption(
-        f"Window cutoff: {out['cutoff']} · Duration: {out['scan_time_s']}s · "
-        f"Instruments processed: {out.get('tickers_processed', 0)}"
-    )
-
-
-# ─── TAB 4: NOTES ───────────────────────────────────────
-with tab_err:
-    if not out["errors"]:
-        st.success("No exceptions — all instruments processed cleanly.")
-    else:
-        st.warning(f"{len(out['errors'])} instrument(s) returned a processing note.")
-        st.dataframe(pd.DataFrame(out["errors"], columns=["Instrument", "Note"]),
-                     use_container_width=True, hide_index=True)
-
-
-# ─────────────────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────────────────
-st.markdown(f"""
-<div class="fintrix-footer">
-    <div class="brand">{BRAND_NAME}</div>
-    <div class="tag">{BRAND_TAG}</div>
-</div>
-""", unsafe_allow_html=True)
+            rs = raw.res
