@@ -71,13 +71,6 @@ SIGNAL_MARKER = "#C9A227"
 BRAND_NAME = "FINTRIX ANALYTICS"
 BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
 
-QUOTES = [
-    "In institutional finance, survival isn't luck—it is mathematical design.",
-    "If you cannot identify where institutional liquidity sits, you are the liquidity.",
-    "Retail traders react to price. Institutions engineer liquidity.",
-    "Skillful risk control is the mark of the superior investor.",
-]
-
 LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
 
@@ -220,18 +213,6 @@ html, body, [class*="css"] {
 .hero-sub {
     color: var(--text-muted); font-size: 12px;
     margin: 12px 0 0 0; letter-spacing: 0.02em;
-}
-.hero-quote {
-    margin: 16px 0 0 0;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    font-style: italic;
-    color: var(--accent-gold);
-    letter-spacing: 0.02em;
-    line-height: 1.55;
-    opacity: 0.92;
-    transition: opacity 200ms ease;
 }
 .status-pill {
     display: inline-flex; align-items: center; gap: 8px;
@@ -515,7 +496,6 @@ div[data-testid="stAlert"] p {
     .hero-title { font-size: 18px !important; }
     .hero-eyebrow { font-size: 9px !important; }
     .hero-sub { font-size: 11px !important; }
-    .hero-quote { font-size: 11px !important; padding-top: 12px !important; }
     .status-pill { font-size: 9px !important; padding: 4px 10px !important; }
     .control-card { padding: 16px 18px !important; }
     .control-title { font-size: 10px !important; margin-bottom: 14px !important; }
@@ -845,12 +825,7 @@ def market_status():
     return (True, "SESSION LIVE") if in_session else (False, "SESSION CLOSED")
 
 def to_csv_bytes(df):
-    """Export only Stock Name, Dev % and Bias (renamed headers)."""
-    if df is None or df.empty:
-        return b""
-    exp = df[["ticker", "distance_pct", "raw_di_diff"]].copy()
-    exp.columns = ["Stock Name", "Dev %", "Bias"]
-    return exp.to_csv(index=False).encode("utf-8")
+    return df.to_csv(index=False).encode("utf-8")
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_batch(tickers_tuple):
@@ -1017,6 +992,47 @@ def build_signal_timeline(ticker_df):
     return fig
 
 
+def generate_narrative(row, ctx, mtf):
+    ticker = row["ticker"]
+    level = LEVEL_LABEL[row["timeframe"]]
+    sig_time = row["datetime"]
+
+    aligned = [k for k, v in mtf.items() if v and v["signal"]]
+    n_aligned = len(aligned)
+
+    if n_aligned >= 3:
+        conviction = "high conviction — broad multi-level alignment"
+    elif n_aligned == 2:
+        conviction = "moderate conviction — partial level agreement"
+    elif n_aligned == 1:
+        conviction = "single-level signal — confirmation pending"
+    else:
+        conviction = "historical signal — current state has cooled"
+
+    aligned_labels = [LEVEL_LABEL[k] for k in aligned]
+
+    parts = [
+        f"**{ticker}** triggered on **{level}** at **{sig_time:%d %b %Y, %H:%M}** "
+        f"with a signal quality score of **{ctx['quality']}/100** ({ctx['quality_label']}).",
+
+        f"Price closed at **{float(ctx['bar']['close']):.2f}**, "
+        f"**{abs(ctx['dev']):.2f}%** below its 20-bar baseline, "
+        f"with a quant score of **{ctx['vol_score']:.0f}/100**. "
+        f"Directional bias printed at **{ctx['bias']:.1f}**, confirming sustained selling pressure.",
+
+        f"Level alignment: **{n_aligned} of 4** "
+        f"({', '.join(aligned_labels) if aligned_labels else 'none currently active'}) — {conviction}.",
+    ]
+
+    if ctx["bars_since"] > 0:
+        parts.append(
+            f"Price has moved **{ctx['change_since']:+.2f}%** since the signal "
+            f"({ctx['bars_since']} bars ago)."
+        )
+
+    return " ".join(parts)
+
+
 # ─────────────────────────────────────────────────────────
 # LANDING SCREEN
 # ─────────────────────────────────────────────────────────
@@ -1043,7 +1059,7 @@ if not st.session_state.get("entered"):
             </div>
             <div class="land-feature">
                 <h4>Quant Scoring</h4>
-                <p>Every signal is graded 0–100 on quant, exhaustion depth,
+                <p>Every signal is graded 0–100 on volume, exhaustion depth,
                    and directional bias strength.</p>
             </div>
             <div class="land-feature">
@@ -1064,14 +1080,11 @@ if not st.session_state.get("entered"):
 
 
 # ─────────────────────────────────────────────────────────
-# HERO (with rotating quote)
+# HERO
 # ─────────────────────────────────────────────────────────
 live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
 dot_cls  = "dot-live" if live else "dot-closed"
-
-# Rotate quote roughly every 30 seconds (changes on rerun / refresh)
-_rotating_quote = QUOTES[int(time.time() // 30) % len(QUOTES)]
 
 st.markdown(f"""
 <div class="hero-wrap">
@@ -1081,7 +1094,6 @@ st.markdown(f"""
     <div class="status-pill {pill_cls}">
         <span class="dot {dot_cls}"></span> {status_label}
     </div>
-    <p class="hero-quote">“{_rotating_quote}”</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1412,6 +1424,9 @@ with tab_chart:
                     "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
                 },
             )
+
+            st.markdown("#### Automated Analysis")
+            st.info(generate_narrative(row, ctx, mtf))
 
             ticker_hist = df[df["ticker"] == row["ticker"]].copy()
             if len(ticker_hist) >= 1:
