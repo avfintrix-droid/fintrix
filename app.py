@@ -82,16 +82,6 @@ LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Lev
 LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
 
 # ─────────────────────────────────────────────────────────
-# QUANT FILTER CONFIG
-#   These names are developer-facing only. In the UI,
-#   hv_stretch is displayed as "Quant H" and
-#   atr_stretch is displayed as "Quant A" for client use.
-# ─────────────────────────────────────────────────────────
-QUANT_SHORT_LEN = 5
-QUANT_LONG_LEN = 20
-QUANT_THRESHOLD = 1.4
-
-# ─────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────
 st.set_page_config(
@@ -637,14 +627,6 @@ def ta_rma(series, length):
 def ta_stdev_pop(series, length):
     return series.rolling(window=length).std(ddof=0)
 
-def ta_atr(high, low, close, length):
-    tr = pd.concat([
-        high - low,
-        (high - close.shift(1)).abs(),
-        (low - close.shift(1)).abs(),
-    ], axis=1).max(axis=1)
-    return ta_rma(tr, length)
-
 
 # ─────────────────────────────────────────────────────────
 # CORE DETECTION ENGINE
@@ -694,30 +676,6 @@ def detect_signals(df):
     results["signal_final"] = (
         results["option_bottom_confirmed"] & (results["raw_di_diff"] < -10)
     )
-
-    # ─────────────────────────────────────────────────────
-    # QUANT VOLATILITY STRETCH
-    #   Implements Pine's "Volatility Stretch Scalper" logic:
-    #   atr_stretch  = (ATR_short/close*100) / (ATR_long/close*100)
-    #   hv_stretch   = stddev(log_ret, short)*√252 / stddev(log_ret, long)*√252
-    #   Quant filter fires when BOTH < QUANT_THRESHOLD
-    # ─────────────────────────────────────────────────────
-    short_atr = ta_atr(high, low, close, QUANT_SHORT_LEN)
-    long_atr  = ta_atr(high, low, close, QUANT_LONG_LEN)
-    short_atr_pct = (short_atr / close) * 100
-    long_atr_pct  = (long_atr / close) * 100
-    results["atr_stretch"] = short_atr_pct / long_atr_pct
-
-    log_returns = np.log(close / close.shift(1))
-    short_hv = log_returns.rolling(QUANT_SHORT_LEN).std(ddof=0) * np.sqrt(252) * 100
-    long_hv  = log_returns.rolling(QUANT_LONG_LEN).std(ddof=0) * np.sqrt(252) * 100
-    results["hv_stretch"] = short_hv / long_hv
-
-    results["quant_ok"] = (
-        (results["atr_stretch"] < QUANT_THRESHOLD)
-        & (results["hv_stretch"] < QUANT_THRESHOLD)
-    )
-
     return results
 
 
@@ -768,8 +726,7 @@ def process_batch(batch_data, timeframes, days_back=10,
 
     all_results = []
     errors = []
-    diag_total = {"empty_data": 0, "stage_a": 0, "stage_b": 0,
-                  "final": 0, "quant": 0}
+    diag_total = {"empty_data": 0, "stage_a": 0, "stage_b": 0, "final": 0}
 
     ist = pytz.timezone("Asia/Kolkata")
     cutoff = (datetime.now(ist) - timedelta(days=days_back)).date()
@@ -836,9 +793,6 @@ def process_batch(batch_data, timeframes, days_back=10,
                 diag_total["stage_a"] += int(scanned["option_bottom_confirmed"].sum())
                 diag_total["stage_b"] += int((scanned["raw_di_diff"] < -10).sum())
                 diag_total["final"] += int(scanned["signal_final"].sum())
-                diag_total["quant"] += int(
-                    (scanned["signal_final"] & scanned["quant_ok"]).sum()
-                )
 
                 sigs = scanned[scanned["signal_final"]].copy()
                 if not sigs.empty:
@@ -847,8 +801,7 @@ def process_batch(batch_data, timeframes, days_back=10,
                     sigs["ticker"] = ticker
                     sigs["timeframe"] = tf_name
                     cols_out = ["datetime", "ticker", "timeframe", "close",
-                                "distance_pct", "raw_di_diff",
-                                "atr_stretch", "hv_stretch", "quant_ok"]
+                                "distance_pct", "raw_di_diff"]
                     all_results.append(sigs[cols_out])
                     ticker_signals += len(sigs)
 
@@ -866,8 +819,7 @@ def process_batch(batch_data, timeframes, days_back=10,
         df = df[df["datetime"].dt.date >= cutoff]
     else:
         df = pd.DataFrame(columns=["datetime", "ticker", "timeframe",
-                                    "close", "distance_pct", "raw_di_diff",
-                                    "atr_stretch", "hv_stretch", "quant_ok"])
+                                    "close", "distance_pct", "raw_di_diff"])
 
     return {
         "results_df": df,
@@ -953,8 +905,6 @@ def compute_signal_context(scanned, row):
         "bars_since": int(bars_since), "change_since": float(change_since),
         "sig_pos": int(sig_pos), "bar": bar,
         "recent_high": recent_high, "recent_low": recent_low,
-        "hv_stretch": float(bar.get("hv_stretch", np.nan)),
-        "atr_stretch": float(bar.get("atr_stretch", np.nan)),
     }
 
 
@@ -1120,6 +1070,7 @@ live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
 dot_cls  = "dot-live" if live else "dot-closed"
 
+# Rotate quote roughly every 30 seconds (changes on rerun / refresh)
 _rotating_quote = QUOTES[int(time.time() // 30) % len(QUOTES)]
 
 st.markdown(f"""
@@ -1285,8 +1236,8 @@ k2.metric("Signals Detected", len(df),
 k3.metric("Scan Duration", f"{out['scan_time_s']}s")
 k4.metric("Active Levels", levels_str)
 
-tab_sig, tab_quant, tab_chart, tab_diag, tab_err = st.tabs(
-    ["SIGNALS", "QUANT SCAN", "CHART", "ANALYTICS", "NOTES"]
+tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
+    ["SIGNALS", "CHART", "ANALYTICS", "NOTES"]
 )
 
 
@@ -1362,103 +1313,7 @@ with tab_sig:
         st.caption("Highlighted rows mark the three most recent signals.")
 
 
-# ─── TAB 2: QUANT SCAN (NEW) ───────────────────────────
-#   Client-facing labels: "Quant H" (internal hv_stretch)
-#                         "Quant A" (internal atr_stretch)
-#   Fires only when Bias < -10 AND Quant H < 1.4 AND Quant A < 1.4
-with tab_quant:
-    if df.empty or "quant_ok" not in df.columns:
-        st.info("Run a fresh scan to populate Quant filter data.")
-    else:
-        qmask = df["quant_ok"].fillna(False).astype(bool)
-        qdf_all = df[qmask].copy()
-
-        if qdf_all.empty:
-            st.info(
-                "No signals passed the Quant filter this scan. "
-                "Quant filter requires Bias < −10 AND Quant H < 1.4 AND Quant A < 1.4."
-            )
-        else:
-            qf1, qf2 = st.columns(2)
-            with qf1:
-                qtf_f = st.multiselect(
-                    "Level",
-                    options=sorted(qdf_all["timeframe"].unique().tolist()),
-                    default=sorted(qdf_all["timeframe"].unique().tolist()),
-                    format_func=lambda x: LEVEL_LABEL.get(x, x),
-                    key="quant_tf_filter",
-                )
-            with qf2:
-                qtk_f = st.multiselect(
-                    "Instrument",
-                    sorted(qdf_all["ticker"].unique().tolist()),
-                    default=[], placeholder="All instruments",
-                    key="quant_tk_filter",
-                )
-
-            qdf = qdf_all[qdf_all["timeframe"].isin(qtf_f)]
-            if qtk_f:
-                qdf = qdf[qdf["ticker"].isin(qtk_f)]
-            qdf = qdf.sort_values(
-                ["datetime", "ticker"], ascending=[False, True]
-            ).reset_index(drop=True)
-
-            if qdf.empty:
-                st.info("No signals match the current filters.")
-            else:
-                qdf.insert(0, "Rank", range(1, len(qdf) + 1))
-                qdf["Timestamp"] = qdf["datetime"].dt.strftime("%d %b %Y · %H:%M")
-                qdf["Instrument"] = qdf["ticker"]
-                qdf["Level"] = qdf["timeframe"].map(LEVEL_LABEL)
-                qdf["Last Price"] = qdf["close"].round(2)
-                qdf["Deviation"] = qdf["distance_pct"].round(2)
-                qdf["Bias"] = qdf["raw_di_diff"].round(2)
-                qdf["Quant H"] = qdf["hv_stretch"].round(3)
-                qdf["Quant A"] = qdf["atr_stretch"].round(3)
-
-                cols_show_q = ["Rank", "Timestamp", "Instrument", "Level",
-                               "Last Price", "Deviation", "Bias",
-                               "Quant H", "Quant A"]
-                disp_q = qdf[cols_show_q]
-
-                top3q = set(range(min(3, len(disp_q))))
-
-                def _style_qrow(row):
-                    styles = [''] * len(row)
-                    if row.name in top3q:
-                        styles = ['background-color: rgba(0, 209, 178, 0.12); '
-                                  'color: #00D1B2; font-weight: 600'] * len(row)
-                    return styles
-
-                styled_q = disp_q.style.apply(_style_qrow, axis=1)
-
-                st.dataframe(
-                    styled_q,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Rank": st.column_config.NumberColumn("#", width="small"),
-                        "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
-                        "Instrument": st.column_config.TextColumn("Instrument", width="small"),
-                        "Level": st.column_config.TextColumn("Level", width="small"),
-                        "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
-                        "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
-                        "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
-                        "Quant H": st.column_config.NumberColumn("Quant H", format="%.3f", width="small"),
-                        "Quant A": st.column_config.NumberColumn("Quant A", format="%.3f", width="small"),
-                    },
-                )
-
-                st.caption(
-                    f"{len(qdf)} signal(s) passed the Quant filter — "
-                    f"Bias < −10, Quant H < {QUANT_THRESHOLD}, Quant A < {QUANT_THRESHOLD}. "
-                    f"Values below {QUANT_THRESHOLD} indicate compressed volatility, "
-                    f"typically a higher-quality reversal setup. "
-                    f"Highlighted rows mark the three most recent."
-                )
-
-
-# ─── TAB 3: CHART ───────────────────────────────────────
+# ─── TAB 2: CHART ───────────────────────────────────────
 with tab_chart:
     if df.empty:
         st.info("No signals available — run a scan with at least one qualified hit.")
@@ -1505,15 +1360,6 @@ with tab_chart:
             q4.metric("Bias", f"{ctx['bias']:.2f}")
             q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
 
-            hv_v = ctx.get("hv_stretch", float("nan"))
-            atr_v = ctx.get("atr_stretch", float("nan"))
-            hv_disp = f"{hv_v:.3f}" if pd.notna(hv_v) else "—"
-            atr_disp = f"{atr_v:.3f}" if pd.notna(atr_v) else "—"
-            st.caption(
-                f"Quant H: {hv_disp} · Quant A: {atr_disp} "
-                f"(Quant filter requires both < {QUANT_THRESHOLD})"
-            )
-
             st.markdown("#### Price Action · Signal Overlay")
             fig = build_pro_chart(scanned, row, ctx, window_days=7)
             if fig is not None:
@@ -1546,4 +1392,100 @@ with tab_chart:
                 if v == "Active":
                     return "background-color: rgba(34,197,94,0.12); color: #22C55E; font-weight: 600;"
                 if v == "Exhaustion":
-                    return "background-color: rgba(245,158,11,0.12); color:
+                    return "background-color: rgba(245,158,11,0.12); color: #F59E0B; font-weight: 600;"
+                if v == "Bias Only":
+                    return "background-color: rgba(0,209,178,0.10); color: #00D1B2; font-weight: 600;"
+                if v == "Quiet":
+                    return "color: #9CA3AF;"
+                return ""
+
+            styled_mtf = mtf_df.style.map(_style_status, subset=["Status"])
+
+            st.dataframe(
+                styled_mtf,
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "Level": st.column_config.TextColumn("Level", width="small"),
+                    "Status": st.column_config.TextColumn("Status", width="medium"),
+                    "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
+                    "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
+                    "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
+                },
+            )
+
+            ticker_hist = df[df["ticker"] == row["ticker"]].copy()
+            if len(ticker_hist) >= 1:
+                st.markdown("#### Signal History · This Instrument")
+                timeline_fig = build_signal_timeline(ticker_hist)
+                st.plotly_chart(timeline_fig, use_container_width=True,
+                                config={"displayModeBar": False})
+
+            st.markdown("#### Swing Context")
+            s1, s2, s3, s4 = st.columns(4)
+            s1.metric("Recent High", f"{ctx['recent_high']:.2f}",
+                      f"{ctx['dist_from_high']:.2f}%")
+            s2.metric("Recent Low", f"{ctx['recent_low']:.2f}",
+                      f"{ctx['dist_from_low']:+.2f}%")
+            s3.metric("Bars Since Signal", ctx["bars_since"])
+            s4.metric("Change Since", f"{ctx['change_since']:+.2f}%")
+
+            related = df[(df["ticker"] == row["ticker"])].copy()
+            if len(related) > 1:
+                related = related.drop(df.index[idx]) if idx in df.index else related
+                if not related.empty:
+                    st.markdown("#### Related Signals · Same Instrument")
+                    rel = related.reset_index(drop=True)
+                    rel.insert(0, "Rank", range(1, len(rel) + 1))
+                    rel["Timestamp"] = rel["datetime"].dt.strftime("%d %b %Y · %H:%M")
+                    rel["Level"] = rel["timeframe"].map(LEVEL_LABEL)
+                    rel["Last Price"] = rel["close"].round(2)
+                    rel["Deviation"] = rel["distance_pct"].round(2)
+                    rel["Bias"] = rel["raw_di_diff"].round(2)
+                    st.dataframe(
+                        rel[["Rank", "Timestamp", "Level", "Last Price",
+                             "Deviation", "Bias"]],
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Rank": st.column_config.NumberColumn("#", width="small"),
+                            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
+                            "Level": st.column_config.TextColumn("Level", width="small"),
+                            "Last Price": st.column_config.NumberColumn("Last", format="%.2f"),
+                            "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
+                            "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
+                        },
+                    )
+
+
+# ─── TAB 3: ANALYTICS ───────────────────────────────────
+with tab_diag:
+    st.markdown("### Detection Funnel")
+    d1, d2, d3, d4 = st.columns(4)
+    d1.metric("Filter 1 Match", diag["stage_a"])
+    d2.metric("Filter 2 Match", diag["stage_b"])
+    d3.metric("Qualified", diag["final"])
+    d4.metric("No Data", diag["empty_data"])
+    st.caption(
+        f"Window cutoff: {out['cutoff']} · Duration: {out['scan_time_s']}s · "
+        f"Instruments processed: {out.get('tickers_processed', 0)}"
+    )
+
+
+# ─── TAB 4: NOTES ───────────────────────────────────────
+with tab_err:
+    if not out["errors"]:
+        st.success("No exceptions — all instruments processed cleanly.")
+    else:
+        st.warning(f"{len(out['errors'])} instrument(s) returned a processing note.")
+        st.dataframe(pd.DataFrame(out["errors"], columns=["Instrument", "Note"]),
+                     use_container_width=True, hide_index=True)
+
+
+# ─────────────────────────────────────────────────────────
+# FOOTER
+# ─────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="fintrix-footer">
+    <div class="brand">{BRAND_NAME}</div>
+    <div class="tag">{BRAND_TAG}</div>
+</div>
+""", unsafe_allow_html=True)
