@@ -1,6 +1,8 @@
-streamlit>=1.32.0
-pandas>=2.0.0
-numpy>=1.24.0
-yfinance>=0.2.40
-pytz>=2024.1
-plotly>=5.20.0
+streamlit
+pandas
+numpy
+scipy
+plotly
+pyotp
+streamlit-autorefresh
+nubra-python-sdk
