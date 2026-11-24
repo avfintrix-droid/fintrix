@@ -1,1491 +1,1183 @@
-import numpy as np
-import pandas as pd
-import yfinance as yf
-import warnings
-import time
+# ================================
+# DEX, VANNA & CHARM ANALYZER (NUBRA) — FINTRIX TERMINAL v3
+# ================================
+import sys
+import dbm.dumb
+if 'dbm.gnu' not in sys.modules:
+    sys.modules['dbm.gnu'] = dbm.dumb
+
 import streamlit as st
-from datetime import datetime, timedelta
-import pytz
-
+import pandas as pd
+import numpy as np
+from nubra_python_sdk.marketdata.market_data import MarketData
+from nubra_python_sdk.start_sdk import InitNubraSdk, NubraEnv
+from streamlit_autorefresh import st_autorefresh
+from datetime import datetime
+import math
+import scipy.stats as stats
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import pyotp
+import builtins
+import getpass
+import os
 
-warnings.filterwarnings("ignore")
+# ──────────────────────────────────────────
+# NUBRA AUTHENTICATION (automated TOTP)
+# ──────────────────────────────────────────
+if 'nubra_client' not in st.session_state or st.session_state.nubra_client is None:
+    with st.spinner("Authenticating with Nubra..."):
+        # IMPORTANT: Replace with your actual TOTP secret (from nubra.totp_generate_secret())
+        TOTP_SECRET = os.environ.get("NUBRA_TOTP_SECRET", "YOUR_TOTP_SECRET_HERE")
+        totp = pyotp.TOTP(TOTP_SECRET)
+        
+        # Patch input() and getpass() to return the current TOTP when Nubra asks
+        orig_input = builtins.input
+        orig_getpass = getpass.getpass
+        
+        def auto_totp_input(prompt=""):
+            return totp.now()
+        
+        def auto_totp_getpass(prompt=""):
+            return totp.now()
+        
+        builtins.input = auto_totp_input
+        getpass.getpass = auto_totp_getpass
+        
+        try:
+            nubra_client = InitNubraSdk(
+                env=NubraEnv.PROD,
+                totp_login=True,   # enables TOTP flow
+                env_creds=True      # reads PHONE_NO and MPIN from .env
+            )
+            st.session_state.nubra_client = nubra_client
+            st.success("✅ Nubra Authentication Successful!")
+        except Exception as e:
+            st.error(f"Authentication failed: {e}")
+            st.stop()
+        finally:
+            # Restore original functions
+            builtins.input = orig_input
+            getpass.getpass = orig_getpass
 
-# ─────────────────────────────────────────────────────────
-# PLOTLY TEMPLATE (inlined — no external file)
-# ─────────────────────────────────────────────────────────
-PLOTLY_LAYOUT = {
-    "paper_bgcolor": "rgba(0,0,0,0)",
-    "plot_bgcolor": "#0B0F14",
-    "font": {
-        "family": "Inter, -apple-system, sans-serif",
-        "color": "#E5E7EB",
-        "size": 11,
-    },
-    "xaxis": {
-        "gridcolor": "#1F2937",
-        "gridwidth": 0.5,
-        "linecolor": "#1F2937",
-        "zeroline": False,
-        "tickfont": {"family": "JetBrains Mono, monospace",
-                     "color": "#9CA3AF", "size": 10},
-        "showspikes": False,
-    },
-    "yaxis": {
-        "gridcolor": "#1F2937",
-        "gridwidth": 0.5,
-        "linecolor": "#1F2937",
-        "zeroline": False,
-        "tickfont": {"family": "JetBrains Mono, monospace",
-                     "color": "#9CA3AF", "size": 10},
-        "showspikes": False,
-    },
-    "hoverlabel": {
-        "bgcolor": "#172030",
-        "bordercolor": "#1F2937",
-        "font": {"family": "JetBrains Mono, monospace",
-                 "color": "#E5E7EB", "size": 11},
-    },
-    "legend": {
-        "bgcolor": "rgba(0,0,0,0)",
-        "bordercolor": "#1F2937",
-        "font": {"family": "Inter, sans-serif",
-                 "color": "#9CA3AF", "size": 10},
-    },
-    "margin": {"l": 10, "r": 10, "t": 20, "b": 10},
-    "showlegend": False,
-    "hovermode": "x unified",
-    "dragmode": "pan",
-}
-
-CANDLE_UP = "#22C55E"
-CANDLE_DOWN = "#EF4444"
-EMA_PRIMARY = "#00D1B2"
-EMA_SECONDARY = "#C9A227"
-SIGNAL_MARKER = "#C9A227"
-
-# ─────────────────────────────────────────────────────────
-# BRANDING + LEVEL MAPPING
-# ─────────────────────────────────────────────────────────
-BRAND_NAME = "FINTRIX ANALYTICS"
-BRAND_TAG = "INSTITUTIONAL SIGNAL INTELLIGENCE"
-
-QUOTES = [
-    "In institutional finance, survival isn't luck—it is mathematical design.",
-    "If you cannot identify where institutional liquidity sits, you are the liquidity.",
-    "Retail traders react to price. Institutions engineer liquidity.",
-    "Skillful risk control is the mark of the superior investor.",
-]
-
-LEVEL_LABEL = {"15m": "Level 1", "30m": "Level 2", "45m": "Level 3", "60m": "Level 4"}
-LEVEL_ORDER = ["15m", "30m", "45m", "60m"]
-
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
 # PAGE CONFIG
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
 st.set_page_config(
-    page_title="Fintrix Analytics · Signal Intelligence",
-    page_icon="◆",
+    page_title="Fintrix | DEX · VANNA · CHARM",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────────────────
-# INSTITUTIONAL CSS
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
+# GLOBAL CSS (modified: PE now green)
+# ──────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
-:root {
-    --bg-app:       #0B0F14;
-    --bg-panel:     #121821;
-    --bg-elevated:  #172030;
-    --border:       #1F2937;
-    --accent-teal:  #00D1B2;
-    --accent-gold:  #C9A227;
-    --bullish:      #22C55E;
-    --bearish:      #EF4444;
-    --warning:      #F59E0B;
-    --text-primary: #E5E7EB;
-    --text-muted:   #9CA3AF;
-}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: #0a0c0f !important;
+    color: #c9d1d9 !important;
+}
+.stApp { background: #0a0c0f !important; }
+
+section[data-testid="stSidebar"] {
+    background: #0f1117 !important;
+    border-right: 1px solid #21262d !important;
+}
+section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
+section[data-testid="stSidebar"] .stSelectbox > div > div,
+section[data-testid="stSidebar"] .stTextInput > div > div {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    color: #e6edf3 !important;
+    border-radius: 4px !important;
+}
+section[data-testid="stSidebar"] .stButton > button {
+    background: #21262d !important;
+    color: #f0a500 !important;
+    border: 1px solid #f0a500 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.08em !important;
+    border-radius: 3px !important;
+    width: 100% !important;
+    margin-top: 6px !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: #f0a500 !important;
+    color: #0a0c0f !important;
 }
 
-.stApp { background: var(--bg-app); }
-
-#MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px; }
-
-/* Section labels */
-.section-label {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--text-muted);
-    margin-bottom: 12px;
+.fintrix-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 18px 0 8px 0;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 18px;
 }
-
-/* Landing page */
-.land-wrap {
-    max-width: 900px; margin: 80px auto 60px;
-    text-align: center; padding: 0 24px;
+.fintrix-logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #f0a500;
+    letter-spacing: 0.12em;
 }
-.land-eyebrow {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
-    text-transform: uppercase; color: var(--accent-gold);
+.fintrix-sub {
+    font-size: 0.75rem;
+    color: #484f58;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.06em;
+}
+.pulse {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    margin-right: 6px;
+    animation: blink 1.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.cards-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
     margin-bottom: 20px;
 }
-.land-title {
-    font-size: 3.6rem; font-weight: 700; line-height: 1.05;
-    color: var(--text-primary); margin: 0 0 8px 0;
-    letter-spacing: -0.02em;
+.card {
+    background: #0f1117;
+    border: 1px solid #21262d;
+    border-radius: 5px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
 }
-.land-title::after {
-    content: ''; display: block; width: 64px; height: 2px;
-    background: var(--accent-gold); margin: 20px auto 0;
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
 }
-.land-tagline {
-    font-size: 1.05rem; color: var(--text-muted);
-    font-weight: 500; letter-spacing: 0.04em;
-    margin: 24px 0 12px 0;
+.card.bear::before { background: #ef4444; }
+.card.bull::before { background: #22c55e; }
+.card-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #484f58;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 6px;
 }
-.land-sub {
-    color: var(--text-muted); font-size: 0.95rem; line-height: 1.7;
-    max-width: 620px; margin: 0 auto;
+.card-val {
+    font-size: 1.45rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1.1;
 }
-.land-stats {
-    display: flex; gap: 1px; justify-content: center;
-    margin: 48px auto 0; flex-wrap: wrap;
-    border: 1px solid var(--border); border-radius: 8px;
-    overflow: hidden; background: var(--border);
-    max-width: 560px;
+.card-val.red { color: #ef4444; }
+.card-val.green { color: #22c55e; }
+.card-sub { font-size: 0.65rem; color: #484f58; font-family: 'IBM Plex Mono', monospace; margin-top: 4px; }
+.card-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border-radius: 2px;
+    margin-top: 6px;
+    font-family: 'IBM Plex Mono', monospace;
 }
-.land-stat {
-    background: var(--bg-panel); padding: 20px 40px; flex: 1;
-    min-width: 150px;
-}
-.land-stat .num {
-    color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.7rem; font-weight: 600; line-height: 1;
-}
-.land-stat .lbl {
-    color: var(--text-muted); font-size: 10px; margin-top: 8px;
-    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600;
-}
-.land-features {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 1px; margin-top: 48px; text-align: left;
-    background: var(--border); border: 1px solid var(--border);
-    border-radius: 8px; overflow: hidden;
-}
-.land-feature {
-    background: var(--bg-panel); padding: 24px;
-}
-.land-feature h4 {
-    color: var(--text-primary); font-size: 0.88rem;
-    margin: 0 0 8px 0; font-weight: 600;
-}
-.land-feature p {
-    color: var(--text-muted); font-size: 0.82rem;
-    margin: 0; line-height: 1.6;
+.badge-red { background: rgba(239,68,68,0.12); color: #f87171; }
+.badge-green { background: rgba(34,197,94,0.12); color: #4ade80; }
+
+.section-head {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #484f58;
+    padding: 10px 0 6px 0;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 14px;
 }
 
-/* Hero header */
-.hero-wrap {
-    background: linear-gradient(180deg, #121821 0%, #0E131A 100%);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 24px 28px; margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+.decay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 10px 0;
+    border-bottom: 2px solid #22c55e;
+    margin-bottom: 16px;
 }
-.hero-eyebrow {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.16em;
-    text-transform: uppercase; color: var(--accent-gold);
+.decay-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #22c55e;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.decay-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    background: #0f1117;
+    border: 1px solid #21262d;
+    border-radius: 5px;
     margin-bottom: 8px;
 }
-.hero-title {
-    font-size: 22px; font-weight: 600;
-    color: var(--text-primary); margin: 0 0 6px 0;
-    letter-spacing: -0.005em; line-height: 1.3;
+.decay-rank {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #f0a500;
+    background: #21262d;
+    border-radius: 12px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
-.hero-title::after {
-    content: ''; display: block; width: 48px; height: 1px;
-    background: var(--accent-gold); margin-top: 10px;
+.decay-strike {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #e6edf3;
+    min-width: 110px;
+    line-height: 1;
 }
-.hero-sub {
-    color: var(--text-muted); font-size: 12px;
-    margin: 12px 0 0 0; letter-spacing: 0.02em;
+.decay-type-ce {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    border-radius: 3px;
+    background: rgba(249,115,22,0.15);
+    color: #f97316;
+    border: 1px solid rgba(249,115,22,0.3);
+    min-width: 40px;
+    text-align: center;
 }
-.hero-quote {
-    margin: 16px 0 0 0;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    font-style: italic;
-    color: var(--accent-gold);
-    letter-spacing: 0.02em;
-    line-height: 1.55;
-    opacity: 0.92;
-    transition: opacity 200ms ease;
+.decay-type-pe {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    border-radius: 3px;
+    background: rgba(34,197,94,0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34,197,94,0.3);
+    min-width: 40px;
+    text-align: center;
 }
-.status-pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 5px 12px; border-radius: 4px;
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    margin-top: 14px;
+.decay-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #22c55e;
+    min-width: 90px;
 }
-.status-live {
-    background: rgba(34, 197, 94, 0.1); color: var(--bullish);
-    border: 1px solid rgba(34, 197, 94, 0.35);
+.decay-bar-wrap {
+    flex: 1;
+    height: 8px;
+    background: #21262d;
+    border-radius: 3px;
+    overflow: hidden;
 }
-.status-closed {
-    background: rgba(245, 158, 11, 0.08); color: var(--warning);
-    border: 1px solid rgba(245, 158, 11, 0.35);
+.decay-bar-ce {
+    height: 100%;
+    background: #f97316;
+    border-radius: 3px;
 }
-.dot { width: 6px; height: 6px; border-radius: 50%; }
-.dot-live { background: var(--bullish); box-shadow: 0 0 6px var(--bullish); }
-.dot-closed { background: var(--warning); }
-
-/* Control panel */
-.control-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 22px 26px; margin-bottom: 18px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+.decay-bar-pe {
+    height: 100%;
+    background: #22c55e;
+    border-radius: 3px;
 }
-.control-title {
-    color: var(--text-muted); font-size: 11px; letter-spacing: 0.08em;
-    font-weight: 600; text-transform: uppercase;
-    margin-bottom: 18px; padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-}
-
-/* Metric cards */
-[data-testid="stMetric"] {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-top: 1px solid var(--border);
-    border-radius: 8px; padding: 16px 18px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-    transition: border-top-color 150ms ease, box-shadow 150ms ease;
-}
-[data-testid="stMetric"]:hover {
-    border-top-color: var(--accent-teal);
-    box-shadow: 0 1px 6px rgba(0, 209, 178, 0.1);
-}
-[data-testid="stMetricLabel"] {
-    color: var(--text-muted) !important;
-    font-size: 10px !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-    font-weight: 600 !important;
-}
-[data-testid="stMetricValue"] {
-    color: var(--text-primary) !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 600 !important;
-    font-size: 1.6rem !important;
-}
-[data-testid="stMetricDelta"] {
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 11px !important; font-weight: 500 !important;
+.decay-charm-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    color: #484f58;
+    text-align: right;
+    min-width: 60px;
 }
 
-/* Buttons */
-.stButton > button {
-    border-radius: 6px; font-weight: 600; font-size: 12px;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 0.65rem 1.2rem;
-    transition: all 150ms ease;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-primary) !important;
+.chart-label-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 4px;
 }
-.stButton > button:hover {
-    border-color: var(--accent-teal);
-    color: var(--accent-teal) !important;
-    background: rgba(0, 209, 178, 0.04);
-}
-.stButton > button[kind="primary"] {
-    background: var(--accent-teal);
-    color: #0B0F14 !important;
-    border: 1px solid var(--accent-teal);
-    font-weight: 700;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #00E5C4;
-    border-color: #00E5C4;
-    color: #0B0F14 !important;
-    box-shadow: 0 0 20px rgba(0, 209, 178, 0.35);
-}
-.stDownloadButton > button {
-    border-radius: 6px; font-weight: 600; font-size: 12px;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 0.65rem 1.2rem;
-    background: transparent;
-    color: var(--accent-teal) !important;
-    border: 1px solid var(--accent-teal);
-}
-.stDownloadButton > button:hover {
-    background: rgba(0, 209, 178, 0.08);
-    box-shadow: 0 0 16px rgba(0, 209, 178, 0.2);
+.legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    display: inline-block;
 }
 
-/* Inputs */
-.stSelectbox label, .stMultiSelect label,
-.stSlider label, .stRadio label, .stTextInput label {
-    color: var(--text-muted) !important;
-    font-weight: 500 !important;
-    font-size: 11px !important;
-    letter-spacing: 0.06em !important;
-    text-transform: uppercase !important;
-}
-[data-baseweb="select"] > div {
-    background: var(--bg-elevated) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
-    color: var(--text-primary) !important;
-}
-[data-baseweb="select"] > div:focus-within {
-    border-color: var(--accent-teal) !important;
-    box-shadow: 0 0 0 2px rgba(0, 209, 178, 0.15) !important;
-}
-[data-baseweb="tag"] {
-    background: rgba(0, 209, 178, 0.15) !important;
-    color: var(--accent-teal) !important;
-    border: 1px solid rgba(0, 209, 178, 0.3) !important;
-}
-[data-baseweb="tag"] span { color: var(--accent-teal) !important; }
-.stSlider [data-baseweb="slider"] [role="slider"] {
-    background: var(--accent-teal) !important;
-    border: 2px solid var(--bg-panel) !important;
-    box-shadow: 0 0 0 1px var(--accent-teal) !important;
-}
-.stRadio [role="radiogroup"] label {
-    text-transform: none !important; letter-spacing: 0 !important;
-    font-size: 13px !important;
-    color: var(--text-primary) !important;
-}
-.stRadio [role="radiogroup"] label[data-checked="true"] {
-    color: var(--accent-teal) !important;
-}
-.stCheckbox label {
-    color: var(--text-primary) !important;
-    font-size: 13px !important;
-    text-transform: none !important;
-    letter-spacing: 0 !important;
-}
-
-/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 0; border-bottom: 1px solid var(--border);
-    padding-bottom: 0;
+    background: transparent !important;
+    border-bottom: 1px solid #21262d !important;
+    gap: 0 !important;
 }
 .stTabs [data-baseweb="tab"] {
-    color: var(--text-muted); font-weight: 600;
-    font-size: 11px; letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 12px 20px;
-    border-bottom: 2px solid transparent;
-    transition: color 150ms ease, border-color 150ms ease;
-}
-.stTabs [data-baseweb="tab"]:hover { color: var(--text-primary); }
-.stTabs [aria-selected="true"] {
-    color: var(--accent-teal) !important;
-    border-bottom: 2px solid var(--accent-teal) !important;
-    background: transparent !important;
-}
-
-/* Headings */
-h2, h3, h4 {
-    color: var(--text-primary) !important;
-    letter-spacing: -0.01em; font-weight: 600 !important;
-}
-h2 { font-size: 16px !important; margin-top: 1.4rem !important;
-     padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-h3 { font-size: 14px !important; }
-h4 { font-size: 13px !important; }
-
-/* Dataframes */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--border) !important;
-    border-radius: 8px !important;
-    overflow: hidden !important;
-    background: var(--bg-panel) !important;
-}
-[data-testid="stDataFrame"] [role="columnheader"] {
-    background: var(--bg-elevated) !important;
-    color: var(--text-muted) !important;
-    font-size: 10px !important;
-    font-weight: 600 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.72rem !important;
     letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
-    border-bottom: 1px solid var(--border) !important;
-    padding: 10px 12px !important;
+    color: #484f58 !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-bottom: 2px solid transparent !important;
 }
-[data-testid="stDataFrame"] [role="gridcell"] {
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 12px !important;
-    color: var(--text-primary) !important;
-    padding: 8px 12px !important;
-    border-bottom: 1px solid rgba(31, 41, 55, 0.5) !important;
-}
-[data-testid="stDataFrame"] [role="row"]:nth-child(even) [role="gridcell"] {
-    background: #0F141C !important;
-}
-[data-testid="stDataFrame"] [role="row"]:nth-child(odd) [role="gridcell"] {
-    background: var(--bg-panel) !important;
-}
-[data-testid="stDataFrame"] [role="row"]:hover [role="gridcell"] {
-    background: var(--bg-elevated) !important;
+.stTabs [aria-selected="true"] {
+    color: #f0a500 !important;
+    border-bottom: 2px solid #f0a500 !important;
 }
 
-/* Alerts */
-div[data-testid="stAlert"] {
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    border-left-width: 3px;
-    background: var(--bg-panel);
-}
-div[data-testid="stAlert"] p {
-    color: var(--text-primary) !important;
-    font-size: 13px !important;
-    line-height: 1.6;
-}
+.stDataFrame { border: 1px solid #21262d !important; border-radius: 4px !important; }
 
-/* Progress */
-.stProgress > div > div > div > div {
-    background: var(--accent-teal) !important;
+[data-testid="stMetricValue"] {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 1.15rem !important;
+    color: #e6edf3 !important;
 }
+[data-testid="stMetricLabel"] {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.6rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    color: #484f58 !important;
+}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 
-/* Captions */
-.stCaption, [data-testid="stCaptionContainer"] {
-    color: var(--text-muted) !important;
-    font-size: 11px !important;
+.extreme-card {
+    background: #0f1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
 }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--bg-app); }
-::-webkit-scrollbar-thumb {
-    background: #334155; border-radius: 4px;
-    transition: background 150ms ease;
+.extreme-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: #8b949e;
+    text-transform: uppercase;
+    margin-bottom: 8px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--accent-teal); }
-
-/* Footer */
-.fintrix-footer {
-    text-align: center; margin-top: 56px;
-    padding: 32px 20px 16px;
-    border-top: 1px solid var(--border);
+.extreme-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #e6edf3;
+    line-height: 1.2;
 }
-.fintrix-footer .brand {
-    font-size: 12px; font-weight: 700;
-    letter-spacing: 0.20em; text-transform: uppercase;
-    color: var(--accent-gold); margin-bottom: 6px;
+.extreme-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: #484f58;
+    margin-top: 6px;
 }
-.fintrix-footer .tag {
-    color: var(--text-muted); font-size: 10px;
-    letter-spacing: 0.16em; text-transform: uppercase;
-    font-weight: 500;
-}
-
-/* MOBILE */
-@media (max-width: 768px) {
-    .block-container { padding-left: 0.85rem; padding-right: 0.85rem; padding-top: 1rem; }
-    .land-wrap { margin: 40px auto 30px; padding: 0 16px; }
-    .land-title { font-size: 2.2rem !important; }
-    .land-title::after { margin-top: 14px; width: 44px; }
-    .land-tagline { font-size: 0.9rem !important; margin: 20px 0 10px 0; }
-    .land-sub { font-size: 0.85rem !important; line-height: 1.6 !important; }
-    .land-eyebrow { font-size: 10px !important; margin-bottom: 16px; }
-    .land-stats { margin-top: 32px; max-width: 100%; }
-    .land-stat { padding: 16px 20px; min-width: 100px; }
-    .land-stat .num { font-size: 1.4rem; }
-    .land-stat .lbl { font-size: 9px; }
-    .land-features { grid-template-columns: 1fr; margin-top: 32px; }
-    .land-feature { padding: 18px; }
-    .hero-wrap { padding: 18px 20px !important; }
-    .hero-title { font-size: 18px !important; }
-    .hero-eyebrow { font-size: 9px !important; }
-    .hero-sub { font-size: 11px !important; }
-    .hero-quote { font-size: 11px !important; padding-top: 12px !important; }
-    .status-pill { font-size: 9px !important; padding: 4px 10px !important; }
-    .control-card { padding: 16px 18px !important; }
-    .control-title { font-size: 10px !important; margin-bottom: 14px !important; }
-    [data-testid="stMetric"] { padding: 12px 14px !important; }
-    [data-testid="stMetricValue"] { font-size: 1.3rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 9px !important; }
-    .stButton > button { padding: 0.7rem 1rem !important; font-size: 11px !important;
-                         min-height: 42px !important; }
-    .stTabs [data-baseweb="tab"] { font-size: 10px !important; padding: 9px 10px !important; }
-    h2 { font-size: 14px !important; }
-    h3 { font-size: 13px !important; }
-    h4 { font-size: 12px !important; }
-    [data-testid="stDataFrame"] [role="gridcell"] { font-size: 11px !important; }
-    .fintrix-footer { margin-top: 40px; padding-top: 24px; }
-    .fintrix-footer .brand { font-size: 10px; letter-spacing: 0.16em; }
-    .fintrix-footer .tag { font-size: 9px; }
+.extreme-badge {
+    display: inline-block;
+    background: #21262d;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #f0a500;
 }
 </style>
 """, unsafe_allow_html=True)
 
+# ──────────────────────────────────────────
+# 1. INITIALIZE NUBRA (use authenticated client)
+# ──────────────────────────────────────────
+md = MarketData(st.session_state.nubra_client)
 
-# ─────────────────────────────────────────────────────────
-# INSTRUMENT UNIVERSES
-# ─────────────────────────────────────────────────────────
-STANDARD_SYMBOLS = [
-    "AARTIIND.NS", "ABB.NS", "ABBOTINDIA.NS", "ABCAPITAL.NS", "ABFRL.NS",
-    "ACC.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANIPORTS.NS", "ADANIENSOL.NS",
-    "ADANIPOWER.NS", "ALKEM.NS", "AMBUJACEM.NS", "APOLLOHOSP.NS", "APOLLOTYRE.NS",
-    "ASHOKLEY.NS", "ASIANPAINT.NS", "ASTRAL.NS", "ATUL.NS", "AUBANK.NS",
-    "AUROPHARMA.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS",
-    "BALKRISIND.NS", "BALRAMCHIN.NS", "BANDHANBNK.NS", "BANKBARODA.NS", "BATAINDIA.NS",
-    "BEL.NS", "BERGEPAINT.NS", "BHARATFORG.NS", "BHARTIARTL.NS", "BHEL.NS",
-    "BIOCON.NS", "BOSCHLTD.NS", "BPCL.NS", "BRITANNIA.NS", "BSOFT.NS",
-    "CANBK.NS", "CANFINHOME.NS", "CHAMBLFERT.NS", "CHOLAFIN.NS", "CIPLA.NS",
-    "COALINDIA.NS", "COFORGE.NS", "COLPAL.NS", "CONCOR.NS", "COROMANDEL.NS",
-    "CROMPTON.NS", "CUMMINSIND.NS", "CYIENT.NS", "DABUR.NS", "DALBHARAT.NS",
-    "DEEPAKNTR.NS", "DELHIVERY.NS", "DIVISLAB.NS", "DLF.NS", "DRREDDY.NS",
-    "EICHERMOT.NS", "ESCORTS.NS", "EXIDEIND.NS", "FEDERALBNK.NS", "FORTIS.NS",
-    "GAIL.NS", "GLENMARK.NS", "GMRINFRA.NS", "GODREJCP.NS", "GODREJPROP.NS",
-    "GRANULES.NS", "GRASIM.NS", "GUJGASLTD.NS", "HAL.NS", "HAVELLS.NS",
-    "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS",
-    "HINDCOPPER.NS", "HINDPETRO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ICICIGI.NS",
-    "ICICIPRULI.NS", "IDEA.NS", "IDFCFIRSTB.NS", "IEX.NS", "IGL.NS",
-    "INDHOTEL.NS", "INDIACEM.NS", "INDIAMART.NS", "INDIGO.NS", "INDUSINDBK.NS",
-    "INDUSTOWER.NS", "INFY.NS", "IOC.NS", "IPCALAB.NS", "IRCTC.NS",
-    "IRFC.NS", "ITC.NS", "JINDALSTEL.NS", "JIOFIN.NS", "JKCEMENT.NS",
-    "JSWENERGY.NS", "JSWSTEEL.NS", "JUBLFOOD.NS", "KALYANKJIL.NS", "KEI.NS",
-    "KFINTECH.NS", "KOTAKBANK.NS", "KPITTECH.NS", "LALPATHLAB.NS", "LICHSGFIN.NS",
-    "LICI.NS", "LTIM.NS", "LT.NS", "LTTS.NS", "LUPIN.NS",
-    "M&M.NS", "M&MFIN.NS", "MANAPPURAM.NS", "MARICO.NS", "MARUTI.NS",
-    "MAXHEALTH.NS", "METROBRAND.NS", "MCX.NS", "MOTHERSON.NS", "MPHASIS.NS",
-    "MRF.NS", "MUTHOOTFIN.NS", "NATIONALUM.NS", "NAUKRI.NS", "NAVINFLUOR.NS",
-    "NESTLEIND.NS", "NHPC.NS", "NMDC.NS", "NTPC.NS", "OBEROIRLTY.NS",
-    "OFSS.NS", "OIL.NS", "ONGC.NS", "PAGEIND.NS", "PAYTM.NS",
-    "PEL.NS", "PERSISTENT.NS", "PETRONET.NS", "PFC.NS", "PHOENIXLTD.NS",
-    "PIDILITIND.NS", "PIIND.NS", "PNB.NS", "POLYCAB.NS", "POWERGRID.NS",
-    "PRESTIGE.NS", "PVRINOX.NS", "RAMCOCEM.NS", "RBLBANK.NS", "RECLTD.NS",
-    "RELIANCE.NS", "RVNL.NS", "SAIL.NS", "SBICARD.NS", "SBILIFE.NS",
-    "SBIN.NS", "SHREECEM.NS", "SHRIRAMFIN.NS", "SIEMENS.NS", "SOLARINDS.NS",
-    "SONACOMS.NS", "SRF.NS", "SUNPHARMA.NS", "SUNTV.NS", "SUPREMEIND.NS",
-    "SUZLON.NS", "SYNGENE.NS", "TATACOMM.NS", "TATACONSUM.NS", "TATAELXSI.NS",
-    "TATAMOTORS.NS", "TATAPOWER.NS", "TATASTEEL.NS", "TCS.NS", "TECHM.NS",
-    "TIINDIA.NS", "TITAN.NS", "TORNTPHARM.NS", "TORNTPOWER.NS", "TRENT.NS",
-    "TRIDENT.NS", "TVSMOTOR.NS", "UBL.NS", "ULTRACEMCO.NS", "UNIONBANK.NS",
-    "UNOMINDA.NS", "UPL.NS", "VBL.NS", "VEDL.NS", "VOLTAS.NS",
-    "WIPRO.NS", "YESBANK.NS", "ZEEL.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"
-]
+# ──────────────────────────────────────────
+# 2. BLACK-SCHOLES HELPERS
+# ──────────────────────────────────────────
+def bs_d1_d2(S, K, T, r, sigma, q=0.0):
+    if T <= 0: return 0.0, 0.0
+    ss = sigma * math.sqrt(T)
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / ss
+    return d1, d1 - ss
 
-HIGH_VOL_SYMBOLS = [
-    "BSE.NS", "MCX.NS", "RVNL.NS", "MAZDOCK.NS", "BHEL.NS",
-    "GODREJPROP.NS", "PRESTIGE.NS", "DLF.NS", "PFC.NS", "RECLTD.NS",
-    "SUZLON.NS", "IDEA.NS", "ZOMATO.NS", "PAYTM.NS", "IRFC.NS",
-    "GMRINFRA.NS", "SAIL.NS", "TATACOMM.NS", "MOTHERSON.NS", "ADANIENT.NS",
-    "ADANIPOWER.NS", "ADANIGREEN.NS", "ADANIENSOL.NS", "NATIONALUM.NS", "HINDCOPPER.NS",
-    "IRB.NS", "INDUSTOWER.NS", "BANDHANBNK.NS", "PNB.NS", "BANKBARODA.NS",
-    "CANBK.NS", "IDFCFIRSTB.NS", "RBLBANK.NS", "UNIONBANK.NS", "ABCAPITAL.NS",
-    "JIOFIN.NS", "GVT&D.NS", "INOXWIND.NS", "VOLTAS.NS", "CHOLAFIN.NS",
-    "SHRIRAMFIN.NS", "TRENT.NS", "HAL.NS", "BEL.NS", "COCHINSHIP.NS",
-    "TATAMOTORS.NS", "TVSMOTOR.NS", "ASHOKLEY.NS", "BHARATFORG.NS", "HINDALCO.NS",
-    "JINDALSTEL.NS", "JSWENERGY.NS", "POLYCAB.NS", "KEI.NS", "KPITTECH.NS",
-    "COFORGE.NS", "EXIDEIND.NS", "FORTIS.NS", "GLENMARK.NS", "BIOCON.NS"
-]
+def compute_vanna(S, K, T, r, sigma, vega):
+    if sigma <= 0 or T <= 0: return 0.0
+    _, d2 = bs_d1_d2(S, K, T, r, sigma)
+    return -vega * d2 / sigma
 
-ALL_SYMBOLS = list(dict.fromkeys(
-    [t.replace(".NS", "") for t in (STANDARD_SYMBOLS + HIGH_VOL_SYMBOLS)]
-))
+def compute_charm(S, K, T, r, sigma, q=0.0, option_type='call'):
+    if T <= 1e-6 or sigma <= 0: return 0.0
+    d1, d2 = bs_d1_d2(S, K, T, r, sigma, q)
+    phi = stats.norm.pdf(d1)
+    term = (r - q) / (sigma * math.sqrt(T)) - d2 / (2.0 * T)
+    eq = math.exp(-q * T)
+    base = -eq * phi * term
+    return base - q * eq * stats.norm.cdf(d1) if option_type == 'call' else base + q * eq * stats.norm.cdf(-d1)
 
-TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
-
-
-# ─────────────────────────────────────────────────────────
-# INDICATOR HELPERS
-# ─────────────────────────────────────────────────────────
-def ta_ema(series, length):
-    return series.ewm(span=length, adjust=False).mean()
-
-def ta_sma(series, length):
-    return series.rolling(window=length).mean()
-
-def ta_rma(series, length):
-    alpha = 1 / length
-    rma = np.full(len(series), np.nan)
-    if len(series) >= length:
-        rma[length - 1] = series.iloc[:length].mean()
-        for i in range(length, len(series)):
-            rma[i] = alpha * series.iloc[i] + (1 - alpha) * rma[i - 1]
-    return pd.Series(rma, index=series.index)
-
-def ta_stdev_pop(series, length):
-    return series.rolling(window=length).std(ddof=0)
-
-
-# ─────────────────────────────────────────────────────────
-# CORE DETECTION ENGINE
-# ─────────────────────────────────────────────────────────
-def detect_signals(df):
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df.copy()
-    df.columns = [str(c).lower() for c in df.columns]
-    results = df.copy()
-
-    results["ema_value"] = ta_ema(results["close"], 20)
-    results["distance_pct"] = ((results["close"] - results["ema_value"]) / results["ema_value"]) * 100
-    results["dist_stdev"] = ta_stdev_pop(results["distance_pct"], 100)
-    results["exhaustion_band"] = -(results["dist_stdev"] * 2.5)
-
-    results["vol_ma"] = ta_sma(results["volume"], 20)
-    results["is_vol_surge"] = results["volume"] > (results["vol_ma"] * 2.0)
-
-    dp = results["distance_pct"]
-    results["is_turning_up"] = (dp > dp.shift(1)) & (dp.shift(1) < dp.shift(2))
-    results["is_deep_exhaust"] = results["distance_pct"] <= results["exhaustion_band"]
-
-    results["option_bottom_confirmed"] = (
-        results["is_deep_exhaust"] & results["is_turning_up"] & results["is_vol_surge"]
-    )
-
-    di_len = 100
-    high, low, close = results["high"], results["low"], results["close"]
-
-    up_move = high - high.shift(1)
-    down_move = low.shift(1) - low
-    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
-    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
-
-    tr = pd.concat([high - low, (high - close.shift(1)).abs(),
-                    (low - close.shift(1)).abs()], axis=1).max(axis=1)
-
-    tr_rma = ta_rma(tr, di_len)
-    plus_dm_rma = ta_rma(pd.Series(plus_dm, index=results.index), di_len)
-    minus_dm_rma = ta_rma(pd.Series(minus_dm, index=results.index), di_len)
-
-    plus_di = np.where(tr_rma != 0, 100 * plus_dm_rma / tr_rma, 0.0)
-    minus_di = np.where(tr_rma != 0, 100 * minus_dm_rma / tr_rma, 0.0)
-    results["raw_di_diff"] = plus_di - minus_di
-
-    results["signal_final"] = (
-        results["option_bottom_confirmed"] & (results["raw_di_diff"] < -10)
-    )
-    return results
-
-
-# ─────────────────────────────────────────────────────────
-# BATCH FETCH
-# ─────────────────────────────────────────────────────────
-def batch_fetch(tickers, period="60d", interval="15m"):
-    symbols = [f"{t}.NS" if not t.endswith(".NS") else t for t in tickers]
+# ──────────────────────────────────────────
+# 3. FETCH CHAIN
+# ──────────────────────────────────────────
+def fetch_chain(underlying, expiry_str):
+    exchange = "BSE" if underlying == "SENSEX" else "NSE"
     try:
-        raw = yf.download(
-            symbols, period=period, interval=interval,
-            progress=False, auto_adjust=True, threads=True,
-            group_by="ticker",
-        )
-    except Exception as e:
-        return {}, f"Download error: {e}"
-
-    if raw is None or raw.empty:
-        return {}, "No data returned by provider"
-
-    out = {}
-    if isinstance(raw.columns, pd.MultiIndex):
-        available = raw.columns.get_level_values(0).unique()
-        for sym in symbols:
-            if sym not in available:
-                continue
-            df = raw[sym].dropna(how="all")
-            if df.empty:
-                continue
-            df.columns = [str(c).lower() for c in df.columns]
-            out[sym.replace(".NS", "")] = df
-    else:
-        if len(symbols) == 1 and not raw.dropna(how="all").empty:
-            df = raw.dropna(how="all")
-            df.columns = [str(c).lower() for c in df.columns]
-            out[symbols[0].replace(".NS", "")] = df
-
-    return out, None
-
-
-# ─────────────────────────────────────────────────────────
-# PROCESS BATCH
-# ─────────────────────────────────────────────────────────
-def process_batch(batch_data, timeframes, days_back=10,
-                  progress_cb=None, ticker_cb=None):
-    t0 = time.time()
-    tf_map = [(tf, TIMEFRAME_MAP[tf]) for tf in timeframes if tf in TIMEFRAME_MAP]
-
-    all_results = []
-    errors = []
-    diag_total = {"empty_data": 0, "stage_a": 0, "stage_b": 0, "final": 0}
-
-    ist = pytz.timezone("Asia/Kolkata")
-    cutoff = (datetime.now(ist) - timedelta(days=days_back)).date()
-
-    now_ist = datetime.now(ist)
-    is_live_market = (now_ist.weekday() < 5) and (
-        (now_ist.hour > 9 or (now_ist.hour == 9 and now_ist.minute >= 15))
-        and (now_ist.hour < 15 or (now_ist.hour == 15 and now_ist.minute <= 30))
-    )
-
-    items = list(batch_data.items())
-    total = max(len(items), 1)
-
-    for i, (ticker, raw) in enumerate(items, 1):
-        try:
-            if raw is None or raw.empty:
-                diag_total["empty_data"] += 1
-                if ticker_cb: ticker_cb(ticker, 0)
-                if progress_cb: progress_cb(i / total)
-                continue
-
-            if not isinstance(raw.index, pd.DatetimeIndex):
-                raw.index = pd.to_datetime(raw.index)
-
-            if raw.index.tz is None:
-                raw.index = raw.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
-            else:
-                raw.index = raw.index.tz_convert("Asia/Kolkata")
-
-            if isinstance(raw.columns, pd.MultiIndex):
-                raw.columns = raw.columns.get_level_values(0)
-            raw.columns = [str(c).lower() for c in raw.columns]
-
-            if "volume" not in raw.columns:
-                errors.append((ticker, "missing volume column"))
-                if ticker_cb: ticker_cb(ticker, 0)
-                if progress_cb: progress_cb(i / total)
-                continue
-
-            raw = raw[raw["volume"] > 0]
-            if len(raw) < 100:
-                if ticker_cb: ticker_cb(ticker, 0)
-                if progress_cb: progress_cb(i / total)
-                continue
-
-            ticker_signals = 0
-            for tf_name, resample_rule in tf_map:
-                resampled = raw.resample(
-                    resample_rule, origin="start_day", offset="9h15min",
-                    label="left", closed="left",
-                ).agg({
-                    "open": "first", "high": "max",
-                    "low": "min", "close": "last", "volume": "sum",
-                }).dropna()
-
-                if len(resampled) < 100:
-                    continue
-
-                if is_live_market and len(resampled) > 1:
-                    resampled = resampled.iloc[:-1]
-
-                scanned = detect_signals(resampled)
-
-                diag_total["stage_a"] += int(scanned["option_bottom_confirmed"].sum())
-                diag_total["stage_b"] += int((scanned["raw_di_diff"] < -10).sum())
-                diag_total["final"] += int(scanned["signal_final"].sum())
-
-                sigs = scanned[scanned["signal_final"]].copy()
-                if not sigs.empty:
-                    idx_name = sigs.index.name or "datetime"
-                    sigs = sigs.reset_index().rename(columns={idx_name: "datetime"})
-                    sigs["ticker"] = ticker
-                    sigs["timeframe"] = tf_name
-                    cols_out = ["datetime", "ticker", "timeframe", "close",
-                                "distance_pct", "raw_di_diff"]
-                    all_results.append(sigs[cols_out])
-                    ticker_signals += len(sigs)
-
-            if ticker_cb: ticker_cb(ticker, ticker_signals)
-
-        except Exception as e:
-            errors.append((ticker, str(e)))
-
-        if progress_cb: progress_cb(i / total)
-
-    elapsed = round(time.time() - t0, 1)
-
-    if all_results:
-        df = pd.concat(all_results, ignore_index=True)
-        df = df[df["datetime"].dt.date >= cutoff]
-    else:
-        df = pd.DataFrame(columns=["datetime", "ticker", "timeframe",
-                                    "close", "distance_pct", "raw_di_diff"])
-
-    return {
-        "results_df": df,
-        "diag": diag_total,
-        "errors": errors,
-        "scan_time_s": elapsed,
-        "cutoff": cutoff,
-        "tickers_processed": len(items),
-    }
-
-
-# ─────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────
-def market_status():
-    now = datetime.now(pytz.timezone("Asia/Kolkata"))
-    if now.weekday() >= 5:
-        return False, "SESSION CLOSED"
-    in_session = (
-        (now.hour > 9 or (now.hour == 9 and now.minute >= 15))
-        and (now.hour < 15 or (now.hour == 15 and now.minute <= 30))
-    )
-    return (True, "SESSION LIVE") if in_session else (False, "SESSION CLOSED")
-
-def to_csv_bytes(df):
-    """Export only Stock Name, Dev % and Bias (renamed headers)."""
-    if df is None or df.empty:
-        return b""
-    exp = df[["ticker", "distance_pct", "raw_di_diff"]].copy()
-    exp.columns = ["Stock Name", "Dev %", "Bias"]
-    return exp.to_csv(index=False).encode("utf-8")
-
-@st.cache_data(ttl=600, show_spinner=False)
-def cached_batch(tickers_tuple):
-    return batch_fetch(list(tickers_tuple), period="60d", interval="15m")
-
-
-# ─────────────────────────────────────────────────────────
-# ANALYTICS
-# ─────────────────────────────────────────────────────────
-def compute_signal_context(scanned, row):
-    sig_dt = row["datetime"]
-    if sig_dt in scanned.index:
-        sig_pos = scanned.index.get_loc(sig_dt)
-    else:
-        sig_pos = int(scanned.index.get_indexer([sig_dt], method="nearest")[0])
-
-    bar = scanned.iloc[sig_pos]
-    vol_ma = bar.get("vol_ma", np.nan)
-    vol_ratio = float(bar["volume"] / vol_ma) if (vol_ma and vol_ma > 0) else 0.0
-    dev = float(bar["distance_pct"])
-    bias = float(bar["raw_di_diff"])
-
-    vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
-    dev_score = min(100.0, abs(dev) / 12.0 * 100)
-    bias_score = min(100.0, abs(bias) / 35.0 * 100)
-    quality = round(0.30 * vol_score + 0.35 * dev_score + 0.35 * bias_score)
-
-    if quality >= 80:   label = "Exceptional"
-    elif quality >= 65: label = "Strong"
-    elif quality >= 50: label = "Moderate"
-    elif quality >= 35: label = "Weak"
-    else:               label = "Marginal"
-
-    lookback = scanned.iloc[max(0, sig_pos - 100):sig_pos + 1]
-    recent_high = float(lookback["high"].max())
-    recent_low  = float(lookback["low"].min())
-    dist_from_high = (float(bar["close"]) - recent_high) / recent_high * 100
-    dist_from_low  = (float(bar["close"]) - recent_low) / recent_low * 100
-
-    bars_since = len(scanned) - 1 - sig_pos
-    if sig_pos < len(scanned) - 1:
-        current_close = float(scanned.iloc[-1]["close"])
-        change_since = (current_close - float(bar["close"])) / float(bar["close"]) * 100
-    else:
-        change_since = 0.0
-
-    return {
-        "vol_ratio": vol_ratio, "vol_score": vol_score,
-        "dev": dev, "bias": bias,
-        "quality": quality, "quality_label": label,
-        "dist_from_high": dist_from_high, "dist_from_low": dist_from_low,
-        "bars_since": int(bars_since), "change_since": float(change_since),
-        "sig_pos": int(sig_pos), "bar": bar,
-        "recent_high": recent_high, "recent_low": recent_low,
-    }
-
-
-def get_current_mtf_state(raw):
-    result = {}
-    for tf_name, rule in TIMEFRAME_MAP.items():
-        try:
-            rs = raw.resample(rule, origin="start_day", offset="9h15min",
-                              label="left", closed="left").agg({
-                                  "open": "first", "high": "max", "low": "min",
-                                  "close": "last", "volume": "sum"}).dropna()
-            if len(rs) < 100:
-                result[tf_name] = None
-                continue
-            scanned = detect_signals(rs)
-            last = scanned.iloc[-1]
-            vma = last.get("vol_ma", np.nan)
-            vol_ratio = float(last["volume"] / vma) if (vma and vma > 0) else 0.0
-            vol_score = min(100.0, max(0.0, (vol_ratio - 2.0) / 4.0 * 100))
-
-            if bool(last["signal_final"]):
-                status = "Active"
-            elif bool(last["option_bottom_confirmed"]):
-                status = "Exhaustion"
-            elif float(last["raw_di_diff"]) < -10:
-                status = "Bias Only"
-            else:
-                status = "Quiet"
-
-            result[tf_name] = {
-                "status": status,
-                "signal": bool(last["signal_final"]),
-                "bias": float(last["raw_di_diff"]),
-                "dev": float(last["distance_pct"]),
-                "vol_ratio": vol_ratio, "vol_score": vol_score,
-            }
-        except Exception:
-            result[tf_name] = None
-    return result
-
-
-def build_pro_chart(scanned, row, ctx, window_days=7):
-    sig_dt = row["datetime"]
-    start = sig_dt - pd.Timedelta(days=window_days)
-    end   = sig_dt + pd.Timedelta(days=2)
-    win = scanned.loc[(scanned.index >= start) & (scanned.index <= end)].copy()
-    if win.empty:
-        return None
-
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        vertical_spacing=0.04, row_heights=[0.74, 0.26])
-
-    fig.add_trace(go.Candlestick(
-        x=win.index, open=win["open"], high=win["high"],
-        low=win["low"], close=win["close"], name="Price",
-        increasing_line_color=CANDLE_UP, decreasing_line_color=CANDLE_DOWN,
-        increasing_fillcolor="rgba(34,197,94,0.35)",
-        decreasing_fillcolor="rgba(239,68,68,0.35)",
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=win.index, y=win["ema_value"], name="Baseline",
-        line=dict(color=EMA_PRIMARY, width=1.5), opacity=0.9,
-        hovertemplate="Baseline: %{y:.2f}<extra></extra>",
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=[sig_dt], y=[float(ctx["bar"]["close"])],
-        mode="markers",
-        marker=dict(symbol="diamond", size=14, color=SIGNAL_MARKER,
-                    line=dict(color="#E5E7EB", width=1.5)),
-        name="Signal", hoverinfo="skip", showlegend=False,
-    ), row=1, col=1)
-
-    colors = [CANDLE_UP if c >= o else CANDLE_DOWN
-              for o, c in zip(win["open"], win["close"])]
-    fig.add_trace(go.Bar(
-        x=win.index, y=win["volume"], name="Volume",
-        marker_color=colors, marker_line_width=0, opacity=0.65,
-    ), row=2, col=1)
-
-    fig.update_layout(height=520, **PLOTLY_LAYOUT)
-    fig.update_xaxes(rangeslider_visible=False)
-    fig.update_yaxes(title_text="Price", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1)
-    return fig
-
-
-def build_signal_timeline(ticker_df):
-    fig = go.Figure()
-    level_colors = {
-        "15m": "#00D1B2", "30m": "#22C55E",
-        "45m": "#C9A227", "60m": "#9CA3AF",
-    }
-    for tf in LEVEL_ORDER:
-        sub = ticker_df[ticker_df["timeframe"] == tf]
-        if sub.empty:
-            continue
-        fig.add_trace(go.Scatter(
-            x=sub["datetime"], y=[LEVEL_LABEL[tf]] * len(sub),
-            mode="markers",
-            marker=dict(size=11, color=level_colors[tf],
-                        line=dict(color="#0B0F14", width=1)),
-            name=LEVEL_LABEL[tf],
-            hovertemplate=f"{LEVEL_LABEL[tf]}<br>%{{x|%d %b %H:%M}}<extra></extra>",
+        result = md.option_chain(underlying, expiry_str, exchange)
+        chain = result.chain
+        spot = chain.current_price / 100 if chain.current_price else None
+        strikes = sorted(set(
+            [o.strike_price / 100 for o in chain.ce] +
+            [o.strike_price / 100 for o in chain.pe]
         ))
-    fig.update_layout(height=160, **PLOTLY_LAYOUT)
-    fig.update_yaxes(categoryorder="array",
-                     categoryarray=[LEVEL_LABEL[t] for t in reversed(LEVEL_ORDER)])
+        data = []
+        for s in strikes:
+            ce = next((o for o in chain.ce if o.strike_price / 100 == s), None)
+            pe = next((o for o in chain.pe if o.strike_price / 100 == s), None)
+
+            def get_price(opt):
+                if opt is None:
+                    return np.nan
+                for attr in ['ltp', 'last_price', 'last_traded_price', 'close']:
+                    if hasattr(opt, attr):
+                        val = getattr(opt, attr)
+                        if val is not None and not np.isnan(val):
+                            return val
+                return np.nan
+
+            data.append({
+                'strike': s,
+                'call_gamma': ce.gamma if ce else np.nan,
+                'call_oi': ce.open_interest if ce else 0,
+                'call_vega': ce.vega if ce else np.nan,
+                'call_iv': ce.iv if ce else np.nan,
+                'put_gamma': pe.gamma if pe else np.nan,
+                'put_oi': pe.open_interest if pe else 0,
+                'put_vega': pe.vega if pe else np.nan,
+                'put_iv': pe.iv if pe else np.nan,
+            })
+        return pd.DataFrame(data).set_index('strike'), spot
+    except Exception as e:
+        st.error(f"Fetch error: {e}")
+        return None, None
+
+# ──────────────────────────────────────────
+# 4. CALCULATE GREEKS
+# ──────────────────────────────────────────
+def calculate_greeks(df, spot, T_years, r=0.05):
+    if df.empty or spot is None: return pd.DataFrame()
+    res = df.copy()
+    cv, pv, cc, pc = [], [], [], []
+    for K, row in df.iterrows():
+        try:
+            ic, vc = float(row['call_iv']), float(row['call_vega'])
+            if ic > 0 and vc == vc:
+                cv.append(compute_vanna(spot, K, T_years, r, ic, vc))
+                cc.append(compute_charm(spot, K, T_years, r, ic, option_type='call'))
+            else:
+                cv.append(0.0); cc.append(0.0)
+        except (TypeError, ValueError):
+            cv.append(0.0); cc.append(0.0)
+        try:
+            ip, vp = float(row['put_iv']), float(row['put_vega'])
+            if ip > 0 and vp == vp:
+                pv.append(compute_vanna(spot, K, T_years, r, ip, vp))
+                pc.append(compute_charm(spot, K, T_years, r, ip, option_type='put'))
+            else:
+                pv.append(0.0); pc.append(0.0)
+        except (TypeError, ValueError):
+            pv.append(0.0); pc.append(0.0)
+
+    res['call_vanna'] = cv; res['put_vanna'] = pv
+    res['call_charm'] = cc; res['put_charm'] = pc
+
+    res['dex']   = (res['call_gamma'] * res['call_oi'] - res['put_gamma'] * res['put_oi']) * spot / 1_000_000
+    res['vanna'] = (res['call_vanna'] * res['call_oi'] - res['put_vanna'] * res['put_oi']) * spot / 1_000_000
+    res['charm'] = (res['call_charm'] * res['call_oi'] - res['put_charm'] * res['put_oi']) * spot / 1_000_000
+
+    res['charm_ce'] = res['call_charm'] * res['call_oi'] * spot / 1_000_000
+    res['charm_pe'] = res['put_charm']  * res['put_oi']  * spot / 1_000_000
+    return res
+
+def find_dex_cross(df):
+    vals, strikes = df['dex'].values, df.index.values
+    for i in range(1, len(vals)):
+        if vals[i-1] < 0 and vals[i] > 0:
+            return strikes[i-1] + (0 - vals[i-1]) / (vals[i] - vals[i-1]) * (strikes[i] - strikes[i-1])
+    return None
+
+def find_vanna_clusters(df):
+    strikes, vanna = df.index.values, df['vanna'].values
+    clusters_pos, clusters_neg, cur_p, cur_n = [], [], [], []
+    for i, s in enumerate(strikes):
+        v = vanna[i]
+        if v > 0:
+            if cur_n: clusters_neg.append(cur_n); cur_n = []
+            cur_p.append((s, v))
+        elif v < 0:
+            if cur_p: clusters_pos.append(cur_p); cur_p = []
+            cur_n.append((s, v))
+        else:
+            if cur_p: clusters_pos.append(cur_p); cur_p = []
+            if cur_n: clusters_neg.append(cur_n); cur_n = []
+    if cur_p: clusters_pos.append(cur_p)
+    if cur_n: clusters_neg.append(cur_n)
+    clusters_pos = [c for c in clusters_pos if len(c) >= 2]
+    clusters_neg = [c for c in clusters_neg if len(c) >= 2]
+    best_p = max(clusters_pos, key=lambda c: sum(abs(v) for _, v in c)) if clusters_pos else None
+    best_n = max(clusters_neg, key=lambda c: sum(abs(v) for _, v in c)) if clusters_neg else None
+    ceil  = (min(s for s,_ in best_p), max(s for s,_ in best_p)) if best_p else None
+    floor = (min(s for s,_ in best_n), max(s for s,_ in best_n)) if best_n else None
+    return ceil, floor
+
+def get_dex_extremes(df):
+    valid = df[(df['call_oi'] > 0) | (df['put_oi'] > 0)].copy()
+    if valid.empty:
+        return None, None, None, None
+    if not valid['dex'].isna().all():
+        pos_row = valid.loc[valid['dex'].idxmax()]
+        pos_strike = pos_row.name if pos_row['dex'] > 0 else None
+        pos_dex = pos_row['dex'] if pos_row['dex'] > 0 else None
+    else:
+        pos_strike = pos_dex = None
+    if not valid['dex'].isna().all():
+        neg_row = valid.loc[valid['dex'].idxmin()]
+        neg_strike = neg_row.name if neg_row['dex'] < 0 else None
+        neg_dex = neg_row['dex'] if neg_row['dex'] < 0 else None
+    else:
+        neg_strike = neg_dex = None
+    return pos_strike, pos_dex, neg_strike, neg_dex
+
+def get_charm_extremes(df, spot):
+    below_pe = [(strike, row['charm_pe']) for strike, row in df.iterrows()
+                if strike < spot and row['put_oi'] > 0 and row['charm_pe'] < 0]
+    above_ce = [(strike, row['charm_ce']) for strike, row in df.iterrows()
+                if strike > spot and row['call_oi'] > 0 and row['charm_ce'] < 0]
+    best_below = min(below_pe, key=lambda x: x[1]) if below_pe else None
+    best_above = min(above_ce, key=lambda x: x[1]) if above_ce else None
+    b_strike, b_charm = best_below if best_below else (None, None)
+    a_strike, a_charm = best_above if best_above else (None, None)
+    return b_strike, b_charm, a_strike, a_charm
+
+# ──────────────────────────────────────────
+# 5. CHART FUNCTIONS
+# ──────────────────────────────────────────
+CHART_BG   = "#0a0c0f"
+PAPER_BG   = "#0a0c0f"
+GRID_COLOR = "#1c2128"
+TEXT_COLOR = "#8b949e"
+AMBER      = "#f0a500"
+RED        = "#ef4444"
+GREEN      = "#22c55e"
+BLUE       = "#3b82f6"
+ORANGE     = "#f97316"
+
+def base_layout(title="", height=380):
+    return dict(
+        title=dict(text=title, font=dict(family="IBM Plex Mono", size=10, color="#484f58"), x=0.01, y=0.99),
+        plot_bgcolor=CHART_BG, paper_bgcolor=PAPER_BG, height=height,
+        margin=dict(l=54, r=14, t=28, b=72),
+        font=dict(family="IBM Plex Mono", size=9, color=TEXT_COLOR),
+        xaxis=dict(
+            showgrid=True, gridcolor=GRID_COLOR, zeroline=False,
+            tickfont=dict(size=8, color=TEXT_COLOR), tickangle=-55,
+        ),
+        yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, zeroline=True,
+                   zerolinecolor="#30363d", zerolinewidth=1,
+                   tickfont=dict(size=8, color=TEXT_COLOR)),
+        legend=dict(font=dict(size=8, color=TEXT_COLOR), bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+
+def make_dex_chart(df, spot, zero_cross, height=380, x_range=None):
+    if x_range is not None and len(x_range) == 2:
+        min_s, max_s = x_range
+        df = df[(df.index >= min_s) & (df.index <= max_s)]
+    if df.empty:
+        return go.Figure()
+    strikes  = df.index.tolist()
+    dex_vals = df['dex'].tolist()
+    colors   = [RED if v < 0 else GREEN for v in dex_vals]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=strikes, y=dex_vals, name="DEX",
+        marker_color=colors, marker_line_width=0, opacity=0.85,
+        hovertemplate="<b>%{x}</b>  DEX: %{y:.3f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color="#30363d", width=1))
+    if spot and (x_range is None or (x_range[0] <= spot <= x_range[1])):
+        fig.add_vline(x=spot, line=dict(color=AMBER, width=1.5, dash="dot"),
+                      annotation_text=f"SPOT {spot:.0f}",
+                      annotation_font=dict(color=AMBER, size=8))
+    if zero_cross and (x_range is None or (x_range[0] <= zero_cross <= x_range[1])):
+        fig.add_vline(x=zero_cross, line=dict(color=BLUE, width=1.5, dash="dash"),
+                      annotation_text=f"Δ0 {zero_cross:.0f}",
+                      annotation_font=dict(color=BLUE, size=8),
+                      annotation_position="top right")
+    layout = base_layout("DEX BY STRIKE", height=height)
+    layout['xaxis']['tickmode']  = 'array'
+    layout['xaxis']['tickvals']  = strikes
+    layout['xaxis']['ticktext']  = [str(int(s)) for s in strikes]
+    layout['bargap'] = 0.15
+    fig.update_layout(**layout)
     return fig
 
+def make_charm_chart(df, spot, height=380, x_range=None):
+    if x_range is not None and len(x_range) == 2:
+        min_s, max_s = x_range
+        df = df[(df.index >= min_s) & (df.index <= max_s)]
+    if df.empty:
+        return go.Figure()
+    strikes    = df.index.tolist()
+    charm_vals = df['charm'].tolist()
+    colors     = [RED if v < 0 else GREEN for v in charm_vals]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=strikes, y=charm_vals, name="Charm",
+        marker_color=colors, marker_line_width=0, opacity=0.85,
+        hovertemplate="<b>%{x}</b>  Charm: %{y:.4f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color="#30363d", width=1))
+    if spot and (x_range is None or (x_range[0] <= spot <= x_range[1])):
+        fig.add_vline(x=spot, line=dict(color=AMBER, width=1.5, dash="dot"),
+                      annotation_text=f"SPOT {spot:.0f}",
+                      annotation_font=dict(color=AMBER, size=8))
+    layout = base_layout("CHARM BY STRIKE", height=height)
+    layout['xaxis']['tickmode']  = 'array'
+    layout['xaxis']['tickvals']  = strikes
+    layout['xaxis']['ticktext']  = [str(int(s)) for s in strikes]
+    layout['bargap'] = 0.15
+    fig.update_layout(**layout)
+    return fig
 
-# ─────────────────────────────────────────────────────────
-# LANDING SCREEN
-# ─────────────────────────────────────────────────────────
-if not st.session_state.get("entered"):
-    st.markdown(f"""
-    <div class="land-wrap">
-        <div class="land-eyebrow">{BRAND_TAG}</div>
-        <h1 class="land-title">{BRAND_NAME}</h1>
-        <p class="land-tagline">Institutional-Grade Signal Discovery</p>
-        <p class="land-sub">
-            A multi-level confluence engine that surfaces high-probability
-            exhaustion patterns across four intraday analysis horizons.
-        </p>
-        <div class="land-stats">
-            <div class="land-stat"><div class="num">04</div><div class="lbl">Levels</div></div>
-            <div class="land-stat"><div class="num">02</div><div class="lbl">Stage Filters</div></div>
-            <div class="land-stat"><div class="num">250+</div><div class="lbl">Instruments</div></div>
-        </div>
-        <div class="land-features">
-            <div class="land-feature">
-                <h4>Multi-Level Confluence</h4>
-                <p>Independent detection across four horizons ensures only
-                   durable signals reach the surface.</p>
-            </div>
-            <div class="land-feature">
-                <h4>Quant Scoring</h4>
-                <p>Every signal is graded 0–100 on quant, exhaustion depth,
-                   and directional bias strength.</p>
-            </div>
-            <div class="land-feature">
-                <h4>Deep Analytics</h4>
-                <p>Candlestick overlays, level alignment matrix, and
-                   automated analysis for every qualified hit.</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+def make_vanna_chart(df, spot, ceil, floor, height=360):
+    strikes    = df.index.tolist()
+    vanna_vals = df['vanna'].tolist()
+    colors     = [BLUE if v >= 0 else "#a855f7" for v in vanna_vals]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=strikes, y=vanna_vals, name="Vanna",
+        marker_color=colors, marker_line_width=0, opacity=0.85,
+        hovertemplate="<b>%{x}</b>  Vanna: %{y:.4f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color="#30363d", width=1))
+    if spot:
+        fig.add_vline(x=spot, line=dict(color=AMBER, width=1.5, dash="dot"),
+                      annotation_text=f"SPOT {spot:.0f}",
+                      annotation_font=dict(color=AMBER, size=8))
+    if ceil:
+        fig.add_vrect(x0=ceil[0], x1=ceil[1], fillcolor="rgba(59,130,246,0.07)",
+                      line=dict(color=BLUE, width=1, dash="dot"),
+                      annotation_text="Ceiling", annotation_font=dict(color=BLUE, size=8))
+    if floor:
+        fig.add_vrect(x0=floor[0], x1=floor[1], fillcolor="rgba(239,68,68,0.07)",
+                      line=dict(color=RED, width=1, dash="dot"),
+                      annotation_text="Floor", annotation_font=dict(color=RED, size=8))
+    layout = base_layout("VANNA BY STRIKE", height=height)
+    layout['xaxis']['tickmode']  = 'array'
+    layout['xaxis']['tickvals']  = strikes
+    layout['xaxis']['ticktext']  = [str(int(s)) for s in strikes]
+    layout['bargap'] = 0.15
+    fig.update_layout(**layout)
+    return fig
 
-    _, c, _ = st.columns([1, 1, 1])
-    with c:
-        if st.button("ENTER PLATFORM", use_container_width=True, type="primary"):
-            st.session_state.entered = True
-            st.rerun()
-    st.stop()
+def make_decay_bar_chart(decay_df, height=320):
+    labels = [f"{int(r['strike'])}  {'CE' if r['type']=='CE' else 'PE'}" for _, r in decay_df.iterrows()]
+    values = decay_df['charm_val'].tolist()
+    colors = [ORANGE if r['type'] == 'CE' else GREEN for _, r in decay_df.iterrows()]
 
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels,
+        y=values,
+        marker_color=colors,
+        marker_line_width=0,
+        opacity=0.9,
+        text=[f"{v:.4f}" for v in values],
+        textposition="outside",
+        textfont=dict(family="IBM Plex Mono", size=9, color=TEXT_COLOR),
+        hovertemplate="<b>%{x}</b><br>Charm: %{y:.4f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color="#30363d", width=1))
 
-# ─────────────────────────────────────────────────────────
-# HERO (with rotating quote)
-# ─────────────────────────────────────────────────────────
-live, status_label = market_status()
-pill_cls = "status-live" if live else "status-closed"
-dot_cls  = "dot-live" if live else "dot-closed"
+    layout = dict(
+        plot_bgcolor=CHART_BG, paper_bgcolor=PAPER_BG, height=height,
+        margin=dict(l=54, r=14, t=28, b=60),
+        font=dict(family="IBM Plex Mono", size=9, color=TEXT_COLOR),
+        xaxis=dict(showgrid=False, zeroline=False,
+                   tickfont=dict(size=9, color="#c9d1d9"), tickangle=0),
+        yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, zeroline=True,
+                   zerolinecolor="#30363d", zerolinewidth=1,
+                   tickfont=dict(size=8, color=TEXT_COLOR)),
+        bargap=0.25,
+        showlegend=False,
+        annotations=[
+            dict(
+                x=0.5, y=1.04, xref="paper", yref="paper",
+                text="HIGHEST DECAY PRESSURE  ·  CE = orange  ·  PE = green",
+                showarrow=False,
+                font=dict(family="IBM Plex Mono", size=9, color="#484f58"),
+                xanchor="center",
+            )
+        ]
+    )
+    fig.update_layout(**layout)
+    return fig
 
-# Rotate quote roughly every 30 seconds (changes on rerun / refresh)
-_rotating_quote = QUOTES[int(time.time() // 30) % len(QUOTES)]
+def build_decay_table(gk_df, top_n=8):
+    rows = []
+    for strike, row in gk_df.iterrows():
+        if row['call_oi'] > 0:
+            rows.append({'strike': strike, 'type': 'CE', 'charm_val': row['charm_ce'], 'oi': row['call_oi']})
+        if row['put_oi'] > 0:
+            rows.append({'strike': strike, 'type': 'PE', 'charm_val': row['charm_pe'], 'oi': row['put_oi']})
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df = df[df['charm_val'] < 0].sort_values('charm_val').head(top_n).reset_index(drop=True)
+    return df
 
+# ──────────────────────────────────────────
+# 6. SIDEBAR AND SESSION STATE
+# ──────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style='font-family:IBM Plex Mono;font-size:0.8rem;color:#f0a500;letter-spacing:0.1em;
+    padding-bottom:12px;border-bottom:1px solid #21262d;margin-bottom:14px;'>
+    ⬡ FINTRIX TERMINAL
+    </div>""", unsafe_allow_html=True)
+
+    st.session_state.underlying = st.selectbox(
+        "UNDERLYING", ["NIFTY", "SENSEX"],
+        index=0 if st.session_state.get("underlying", "NIFTY") == "NIFTY" else 1,
+        key="sidebar_underlying"
+    )
+    st.session_state.expiry_input = st.text_input(
+        "EXPIRY (YYYYMMDD)",
+        value=st.session_state.get("expiry_input", "20260609"),
+        key="sidebar_expiry"
+    )
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    interval_map   = {"30 sec": 30, "1 min": 60, "2 min": 120, "3 min": 180, "5 min": 300}
+    selected_label = st.selectbox("AUTO-REFRESH", list(interval_map.keys()), index=1)
+    refresh_seconds = interval_map[selected_label]
+    auto_refresh   = st.checkbox("ENABLE AUTO-REFRESH", value=True)
+    manual_refresh = st.button("⟳  REFRESH NOW")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='font-family:IBM Plex Mono;font-size:0.6rem;color:#30363d;line-height:1.8;'>
+    RISK-FREE RATE · 5%<br>SOURCE · NUBRA PROD<br>GREEKS · BLACK-SCHOLES
+    </div>""", unsafe_allow_html=True)
+
+if auto_refresh:
+    st_autorefresh(interval=refresh_seconds * 1000, key="fintrix_refresh")
+
+if "underlying" not in st.session_state:
+    st.session_state.underlying = "NIFTY"
+if "expiry_input" not in st.session_state:
+    st.session_state.expiry_input = "20260609"
+
+_SS_DEFAULTS = {
+    'gk_df': None, 'spot': None, 'zero_cross': None,
+    'ceil_zone': None, 'floor_zone': None,
+    'last_fetch': None, 'last_update': datetime.now(),
+}
+for _k, _v in _SS_DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+# ──────────────────────────────────────────
+# 7. HEADER
+# ──────────────────────────────────────────
 st.markdown(f"""
-<div class="hero-wrap">
-    <div class="hero-eyebrow">{BRAND_TAG}</div>
-    <div class="hero-title">{BRAND_NAME}</div>
-    <p class="hero-sub">Multi-level confluence engine · Four intraday analysis horizons</p>
-    <div class="status-pill {pill_cls}">
-        <span class="dot {dot_cls}"></span> {status_label}
-    </div>
-    <p class="hero-quote">“{_rotating_quote}”</p>
+<div class="fintrix-header">
+  <span class="fintrix-logo">FINTRIX | DEX · VANNA · CHARM</span>
+  <span class="fintrix-sub">
+    <span class="pulse"></span>
+    {st.session_state.underlying} &nbsp;·&nbsp; EXPIRY {st.session_state.expiry_input} &nbsp;·&nbsp; REFRESH {selected_label}
+  </span>
 </div>
 """, unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────────────────
-# CONTROL PANEL
-# ─────────────────────────────────────────────────────────
-st.markdown('<div class="control-card">', unsafe_allow_html=True)
-st.markdown('<div class="control-title">Scan Configuration</div>', unsafe_allow_html=True)
-
-rc1, rc2 = st.columns([2, 1])
-with rc1:
-    universe = st.radio(
-        "Instrument Universe",
-        ["Standard (~190)", "High Volatility (~60)", "Full (~250)"],
-        index=2, horizontal=True,
+# ──────────────────────────────────────────
+# 8. DASHBOARD MANUAL CONTROLS
+# ──────────────────────────────────────────
+col_manual1, col_manual2, col_manual3 = st.columns([2,2,1])
+with col_manual1:
+    new_underlying = st.selectbox(
+        "📊 UNDERLYING",
+        ["NIFTY", "SENSEX"],
+        index=0 if st.session_state.underlying == "NIFTY" else 1,
+        key="dashboard_underlying"
     )
-    if universe.startswith("Standard"):
-        base = [t.replace(".NS", "") for t in STANDARD_SYMBOLS]
-    elif universe.startswith("High"):
-        base = [t.replace(".NS", "") for t in HIGH_VOL_SYMBOLS]
-    else:
-        base = ALL_SYMBOLS
-with rc2:
-    max_tickers = st.slider(
-        "Max Instruments", min_value=10, max_value=len(base),
-        value=len(base), step=10,
+with col_manual2:
+    new_expiry = st.text_input(
+        "📅 EXPIRY (YYYYMMDD)",
+        value=st.session_state.expiry_input,
+        key="dashboard_expiry"
     )
-tickers = base[:max_tickers]
+with col_manual3:
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    force_refresh = st.button("🔄 REFRESH DATA", use_container_width=True)
 
-rc3, rc4 = st.columns([3, 2])
-with rc3:
-    st.markdown('<div class="section-label">Analysis Levels</div>', unsafe_allow_html=True)
-    lvl_cols = st.columns(4)
-    lvl_1 = lvl_cols[0].checkbox("Level 1", value=True)
-    lvl_2 = lvl_cols[1].checkbox("Level 2", value=True)
-    lvl_3 = lvl_cols[2].checkbox("Level 3", value=True)
-    lvl_4 = lvl_cols[3].checkbox("Level 4", value=True)
-    selected_tfs = [tf for tf, on in
-                    [("15m", lvl_1), ("30m", lvl_2),
-                     ("45m", lvl_3), ("60m", lvl_4)] if on]
-with rc4:
-    days_back = st.slider("Look-back Window (days)", 5, 30, 10, 1)
+if new_underlying != st.session_state.underlying:
+    st.session_state.underlying = new_underlying
+    force_refresh = True
+if new_expiry != st.session_state.expiry_input:
+    st.session_state.expiry_input = new_expiry
+    force_refresh = True
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-b1, b2, b3, b4 = st.columns([2, 1, 1, 1])
-with b1:
-    run_btn = st.button("RUN SCAN", use_container_width=True, type="primary")
-with b2:
-    refresh_btn = st.button("Refresh", use_container_width=True)
-with b3:
-    clear_btn = st.button("Clear", use_container_width=True)
-with b4:
-    if st.session_state.get("scan_out"):
-        df_now = st.session_state.scan_out["results_df"]
-        if not df_now.empty:
-            st.download_button(
-                "Export", data=to_csv_bytes(df_now),
-                file_name=f"signals_{datetime.now():%Y%m%d_%H%M}.csv",
-                mime="text/csv", use_container_width=True,
-            )
 
-st.markdown('</div>', unsafe_allow_html=True)
+# ──────────────────────────────────────────
+# 9. FETCH LOGIC
+# ──────────────────────────────────────────
+def should_refresh():
+    if manual_refresh or force_refresh: return True
+    if st.session_state.get("gk_df") is None: return True
+    if auto_refresh:
+        last = st.session_state.get("last_fetch")
+        return last is None or (datetime.now() - last).total_seconds() >= refresh_seconds
+    return False
 
-if clear_btn:
-    st.session_state.scan_out = None
-    st.rerun()
-
-if refresh_btn:
-    st.cache_data.clear()
-    st.session_state.scan_out = None
-    st.success("Cache cleared. Next scan will pull fresh data.")
-
-
-# ─────────────────────────────────────────────────────────
-# RUN SCAN
-# ─────────────────────────────────────────────────────────
-if "scan_out" not in st.session_state:
-    st.session_state.scan_out = None
-
-if run_btn:
-    if not selected_tfs:
-        st.error("Select at least one level.")
-        st.stop()
-    if not tickers:
-        st.error("No instruments selected.")
-        st.stop()
-
-    fetch_slot = st.empty()
-    fetch_slot.info(f"Fetching data for {len(tickers)} instruments…")
-    batch_data, fetch_err = cached_batch(tuple(tickers))
-
-    if fetch_err:
-        fetch_slot.empty()
-        st.error(f"Fetch failed: {fetch_err}")
-        st.stop()
-    if not batch_data:
-        fetch_slot.empty()
-        st.error("No data returned. Try Refresh and scan again.")
-        st.stop()
-
-    fetch_slot.success(f"{len(batch_data)}/{len(tickers)} instruments loaded. Processing…")
-    progress = st.progress(0.0, text="Detecting signals…")
-    status_slot = st.empty()
-
-    def _prog(p):
-        progress.progress(min(p, 1.0), text=f"Scanning… {int(p*100)}%")
-
-    def _tick(name, n):
-        if n > 0:
-            status_slot.success(f"{name} — {n} qualified")
+if should_refresh():
+    with st.spinner(f"FETCHING {st.session_state.underlying} CHAIN ..."):
+        chain_df, spot = fetch_chain(st.session_state.underlying, st.session_state.expiry_input)
+        if chain_df is not None and spot is not None:
+            expiry_date = datetime.strptime(st.session_state.expiry_input, "%Y%m%d").date()
+            days = max(0.1, (expiry_date - datetime.now().date()).days)
+            T    = days / 365.0
+            gk_df = calculate_greeks(chain_df, spot, T)
+            st.session_state.update({
+                'gk_df':       gk_df,
+                'spot':        spot,
+                'zero_cross':  find_dex_cross(gk_df),
+                'ceil_zone':   find_vanna_clusters(gk_df)[0],
+                'floor_zone':  find_vanna_clusters(gk_df)[1],
+                'last_fetch':  datetime.now(),
+                'last_update': datetime.now(),
+                'T_years':     T,
+            })
         else:
-            status_slot.info(f"{name}")
+            st.warning("No data. Keeping prior snapshot.")
 
-    out = process_batch(batch_data, selected_tfs, days_back=days_back,
-                        progress_cb=_prog, ticker_cb=_tick)
-    progress.empty()
-    status_slot.empty()
-    fetch_slot.empty()
-
-    st.session_state.scan_out = out
-    st.session_state.scan_meta = {
-        "tickers_scanned": len(batch_data),
-        "timeframes": selected_tfs,
-        "days_back": days_back,
-    }
-    st.success(
-        f"Scan complete — {len(out['results_df'])} signal(s) "
-        f"across {len(batch_data)} instruments in {out['scan_time_s']}s."
-    )
-
-
-# ─────────────────────────────────────────────────────────
-# RESULTS
-# ─────────────────────────────────────────────────────────
-out = st.session_state.scan_out
-
-if out is None:
-    st.info("Configure the scan above, then click RUN SCAN.")
+if st.session_state.gk_df is None:
+    st.info("↑ Click REFRESH NOW or enable auto-refresh to load data.")
     st.stop()
 
-df   = out["results_df"]
-diag = out["diag"]
-meta = st.session_state.get("scan_meta", {})
+gk_df      = st.session_state.gk_df
+spot       = st.session_state.spot
+zero_cross = st.session_state.zero_cross
+ceil_zone  = st.session_state.ceil_zone
+floor_zone = st.session_state.floor_zone
+last_upd   = st.session_state.last_update
+T_years    = st.session_state.get('T_years', 0.05)
+decay_df   = build_decay_table(gk_df, top_n=8)
 
-levels_str = " · ".join([LEVEL_LABEL[t] for t in meta.get("timeframes", [])])
+net_dex   = gk_df['dex'].sum()
+net_vanna = gk_df['vanna'].sum()
+net_charm = gk_df['charm'].sum()
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Instruments Scanned", meta.get("tickers_scanned", out.get("tickers_processed", 0)))
-k2.metric("Signals Detected", len(df),
-          delta=f"{df['ticker'].nunique()} unique" if len(df) else "none")
-k3.metric("Scan Duration", f"{out['scan_time_s']}s")
-k4.metric("Active Levels", levels_str)
+# ──────────────────────────────────────────
+# 10. TOP METRIC CARDS
+# ──────────────────────────────────────────
+def card_cls(v): return "bear" if v < 0 else "bull"
+def val_cls(v):  return "red"  if v < 0 else "green"
 
-tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
-    ["SIGNALS", "CHART", "ANALYTICS", "NOTES"]
-)
+st.markdown(f"""
+<div class="cards-row">
+  <div class="card {card_cls(net_dex)}">
+    <div class="card-label">Net GEX</div>
+    <div class="card-val {val_cls(net_dex)}">{net_dex:+.2f}</div>
+    <div class="card-sub">Gamma Exposure</div>
+    <span class="card-badge {'badge-red' if net_dex<0 else 'badge-green'}">{'SHORT GAMMA' if net_dex<0 else 'LONG GAMMA'}</span>
+  </div>
+  <div class="card {card_cls(net_dex)}">
+    <div class="card-label">Net DEX</div>
+    <div class="card-val {val_cls(net_dex)}">{net_dex:+.2f}</div>
+    <div class="card-sub">Dealer Delta Exposure</div>
+    <span class="card-badge {'badge-red' if net_dex<0 else 'badge-green'}">{'NET SHORT δ' if net_dex<0 else 'NET LONG δ'}</span>
+  </div>
+  <div class="card {card_cls(net_vanna)}">
+    <div class="card-label">Net Vanna</div>
+    <div class="card-val {val_cls(net_vanna)}">{net_vanna:+.4f}</div>
+    <div class="card-sub">IV sensitivity</div>
+    <span class="card-badge {'badge-red' if net_vanna<0 else 'badge-green'}">{'IV↑ = SELL δ' if net_vanna<0 else 'IV↑ = BUY δ'}</span>
+  </div>
+  <div class="card {'bear' if net_charm<0 else 'bull'}">
+    <div class="card-label">Net Charm</div>
+    <div class="card-val {val_cls(net_charm)}">{net_charm:+.4f}</div>
+    <div class="card-sub">Time-decay hedging</div>
+    <span class="card-badge {'badge-red' if net_charm<0 else 'badge-green'}">{'ΘDECAY DRAG' if net_charm<0 else 'ΘDECAY SUPPORT'}</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
+# ──────────────────────────────────────────
+# 11. TABS
+# ──────────────────────────────────────────
+tab1, tab2 = st.tabs([
+    "  ▣  DEX · CHARM · DECAY  ",
+    "  ▤  VANNA · TABLE  "
+])
 
-# ─── TAB 1: SIGNALS ─────────────────────────────────────
-with tab_sig:
-    if df.empty:
-        st.info(f"No signals detected in the last {meta.get('days_back', 10)} days.")
-    else:
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            tf_f = st.multiselect(
-                "Level",
-                options=sorted(df["timeframe"].unique().tolist()),
-                default=sorted(df["timeframe"].unique().tolist()),
-                format_func=lambda x: LEVEL_LABEL.get(x, x),
-            )
-        with f2:
-            tk_f = st.multiselect(
-                "Instrument",
-                sorted(df["ticker"].unique().tolist()),
-                default=[], placeholder="All instruments",
-            )
-        with f3:
-            min_bias = st.slider(
-                "Max Bias Threshold",
-                float(df["raw_di_diff"].min()), 0.0, 0.0,
-            )
+# ════════════════════════════════════════════
+# TAB 1
+# ════════════════════════════════════════════
+with tab1:
 
-        filt = df[df["timeframe"].isin(tf_f) & (df["raw_di_diff"] <= min_bias)]
-        if tk_f:
-            filt = filt[filt["ticker"].isin(tk_f)]
-        filt = filt.sort_values(["datetime", "ticker"], ascending=[False, True])
+    # Key levels strip
+    kc1, kc2, kc3, kc4, kc5 = st.columns(5)
+    kc1.metric("SPOT",          f"{spot:,.1f}")
+    kc2.metric("DEX ZERO",      f"{zero_cross:,.0f}" if zero_cross else "—")
+    kc3.metric("VANNA CEILING", f"{ceil_zone[0]:.0f}–{ceil_zone[1]:.0f}" if ceil_zone else "—")
+    kc4.metric("VANNA FLOOR",   f"{floor_zone[0]:.0f}–{floor_zone[1]:.0f}" if floor_zone else "—")
+    kc5.metric("RANGE pts",     f"{ceil_zone[1]-floor_zone[0]:.0f}" if (ceil_zone and floor_zone) else "—")
 
-        disp = filt.copy().reset_index(drop=True)
-        disp.insert(0, "Rank", range(1, len(disp) + 1))
-        disp["Timestamp"] = disp["datetime"].dt.strftime("%d %b %Y · %H:%M")
-        disp["Instrument"] = disp["ticker"]
-        disp["Level"] = disp["timeframe"].map(LEVEL_LABEL)
-        disp["Last Price"] = disp["close"].round(2)
-        disp["Deviation"] = disp["distance_pct"].round(2)
-        disp["Bias"] = disp["raw_di_diff"].round(2)
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-        cols_show = ["Rank", "Timestamp", "Instrument", "Level",
-                     "Last Price", "Deviation", "Bias"]
-        disp = disp[cols_show]
+    # ── STRIKE RANGE SELECTION (shared for DEX and CHARM charts) ──
+    all_strikes = gk_df.index.tolist()
+    min_strike_default = int(min(all_strikes))
+    max_strike_default = int(max(all_strikes))
+    if 'dex_range' not in st.session_state:
+        st.session_state.dex_range = (min_strike_default, max_strike_default)
+    if 'charm_range' not in st.session_state:
+        st.session_state.charm_range = (min_strike_default, max_strike_default)
 
-        top3 = set(range(min(3, len(disp))))
-
-        def _style_row(row):
-            styles = [''] * len(row)
-            if row.name in top3:
-                styles = ['background-color: rgba(34, 197, 94, 0.10); '
-                          'color: #22C55E; font-weight: 600'] * len(row)
-            return styles
-
-        styled = disp.style.apply(_style_row, axis=1)
-
-        st.dataframe(
-            styled,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Rank": st.column_config.NumberColumn("#", width="small"),
-                "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
-                "Instrument": st.column_config.TextColumn("Instrument", width="small"),
-                "Level": st.column_config.TextColumn("Level", width="small"),
-                "Last Price": st.column_config.NumberColumn("Last", format="%.2f", width="small"),
-                "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%", width="small"),
-                "Bias": st.column_config.NumberColumn("Bias", format="%.2f", width="small"),
-            },
+    st.markdown('<div class="section-head">🔍 MANUAL STRIKE RANGE</div>', unsafe_allow_html=True)
+    range_col1, range_col2 = st.columns(2)
+    with range_col1:
+        st.session_state.dex_range = st.slider(
+            "DEX Chart range",
+            min_value=min_strike_default, max_value=max_strike_default,
+            value=st.session_state.dex_range, step=50,
+            key="dex_range_slider"
+        )
+    with range_col2:
+        st.session_state.charm_range = st.slider(
+            "Charm Chart range",
+            min_value=min_strike_default, max_value=max_strike_default,
+            value=st.session_state.charm_range, step=50,
+            key="charm_range_slider"
         )
 
-        st.caption("Highlighted rows mark the three most recent signals.")
+    # ── DEX + CHARM side-by-side with selected ranges ──
+    col_dex, col_charm = st.columns(2)
+    with col_dex:
+        st.markdown('<div class="section-head">DEX BY STRIKE</div>', unsafe_allow_html=True)
+        dex_fig = make_dex_chart(gk_df, spot, zero_cross, height=370, x_range=st.session_state.dex_range)
+        st.plotly_chart(dex_fig, use_container_width=True, config={"displayModeBar": False})
+    with col_charm:
+        st.markdown('<div class="section-head">CHARM BY STRIKE</div>', unsafe_allow_html=True)
+        charm_fig = make_charm_chart(gk_df, spot, height=370, x_range=st.session_state.charm_range)
+        st.plotly_chart(charm_fig, use_container_width=True, config={"displayModeBar": False})
 
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-# ─── TAB 2: CHART ───────────────────────────────────────
-with tab_chart:
-    if df.empty:
-        st.info("No signals available — run a scan with at least one qualified hit.")
-    else:
-        labels = df.apply(
-            lambda r: f"{r['ticker']} · {LEVEL_LABEL[r['timeframe']]} · "
-                      f"{r['datetime']:%d %b %Y %H:%M}",
-            axis=1,
-        ).tolist()
-        pick = st.selectbox("Select a signal", labels, key="chart_pick")
-        idx = labels.index(pick)
-        row = df.iloc[idx]
+    # ─────────────────────────────────────────────────────────
+    # DEX EXTREMES & CHARM EXTREMES
+    # ─────────────────────────────────────────────────────────
+    st.markdown('<div class="section-head">⚡ EXTREMES & PRESSURE POINTS</div>', unsafe_allow_html=True)
 
-        data, ferr = cached_batch((row["ticker"],))
-        if ferr or row["ticker"] not in data:
-            st.error(f"Could not load data for {row['ticker']}. Try refreshing.")
+    pos_strike, pos_dex, neg_strike, neg_dex = get_dex_extremes(gk_df)
+    b_strike, b_charm, a_strike, a_charm = get_charm_extremes(gk_df, spot)
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.markdown("**DEX Extremes**")
+        if pos_strike is not None:
+            st.markdown(f"""
+            <div class="extreme-card">
+                <div class="extreme-title">📈 MAX POSITIVE DEX (Long Gamma)</div>
+                <div class="extreme-value">{int(pos_strike):,}</div>
+                <div class="extreme-sub">DEX: {pos_dex:+.3f}</div>
+                <span class="extreme-badge">CALL OI dominant → dealer delta support</span>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            raw = data[row["ticker"]].copy()
-            if not isinstance(raw.index, pd.DatetimeIndex):
-                raw.index = pd.to_datetime(raw.index)
-            if raw.index.tz is None:
-                raw.index = raw.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
-            else:
-                raw.index = raw.index.tz_convert("Asia/Kolkata")
+            st.markdown('<div class="extreme-card">⚠️ No positive DEX strike with OI > 0</div>', unsafe_allow_html=True)
 
-            rule = TIMEFRAME_MAP[row["timeframe"]]
-            rs = raw.resample(
-                rule, origin="start_day", offset="9h15min",
-                label="left", closed="left",
-            ).agg({
-                "open": "first", "high": "max", "low": "min",
-                "close": "last", "volume": "sum",
-            }).dropna()
+        if neg_strike is not None:
+            st.markdown(f"""
+            <div class="extreme-card">
+                <div class="extreme-title">📉 MAX NEGATIVE DEX (Short Gamma)</div>
+                <div class="extreme-value">{int(neg_strike):,}</div>
+                <div class="extreme-sub">DEX: {neg_dex:+.3f}</div>
+                <span class="extreme-badge">PUT OI heavy → dealer delta hedge accelerates</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="extreme-card">⚠️ No negative DEX strike with OI > 0</div>', unsafe_allow_html=True)
 
-            scanned = detect_signals(rs)
-            ctx = compute_signal_context(scanned, row)
-            mtf = get_current_mtf_state(raw)
+    with col_right:
+        st.markdown("**Charm Extremes (Decay Pressure Range)**")
+        if b_strike is not None:
+            st.markdown(f"""
+            <div class="extreme-card">
+                <div class="extreme-title">🔻 BELOW SPOT · Max Negative Put Charm</div>
+                <div class="extreme-value">{int(b_strike):,}  <span style="font-size:1rem;">(PE)</span></div>
+                <div class="extreme-sub">Charm: {b_charm:.4f}</div>
+                <span class="extreme-badge">Fastest put time‑decay below spot</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="extreme-card">⚠️ No negative put charm below spot</div>', unsafe_allow_html=True)
 
-            q1, q2, q3, q4, q5 = st.columns(5)
-            q1.metric("Signal Quality", f"{ctx['quality']}/100", ctx["quality_label"])
-            q2.metric("Quant Score", f"{ctx['vol_score']:.0f}/100",
-                      "high" if ctx['vol_score'] >= 50 else "moderate")
-            q3.metric("Deviation", f"{ctx['dev']:.2f}%")
-            q4.metric("Bias", f"{ctx['bias']:.2f}")
-            q5.metric("Bars Since", ctx["bars_since"], f"{ctx['change_since']:+.2f}%")
+        if a_strike is not None:
+            st.markdown(f"""
+            <div class="extreme-card">
+                <div class="extreme-title">🔺 ABOVE SPOT · Max Negative Call Charm</div>
+                <div class="extreme-value">{int(a_strike):,}  <span style="font-size:1rem;">(CE)</span></div>
+                <div class="extreme-sub">Charm: {a_charm:.4f}</div>
+                <span class="extreme-badge">Fastest call time‑decay above spot</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="extreme-card">⚠️ No negative call charm above spot</div>', unsafe_allow_html=True)
 
-            st.markdown("#### Price Action · Signal Overlay")
-            fig = build_pro_chart(scanned, row, ctx, window_days=7)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True,
-                                config={"displayModeBar": True, "displaylogo": False})
-            else:
-                st.warning("No price bars available around this signal.")
+        if b_strike and a_strike:
+            st.markdown(f"""
+            <div style='background:#0f1117;border:1px solid #f0a500;border-radius:8px;padding:12px;margin-top:8px;text-align:center;'>
+                <span style='font-family:IBM Plex Mono;font-size:0.7rem;color:#f0a500;'>TRADING RANGE</span><br>
+                <span style='font-family:IBM Plex Mono;font-size:1.2rem;font-weight:600;'>{int(b_strike):,}  ↔  {int(a_strike):,}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.markdown("#### Level Alignment Matrix")
-            mtf_rows = []
-            for tf_name in LEVEL_ORDER:
-                state = mtf.get(tf_name)
-                if state is None:
-                    mtf_rows.append({
-                        "Level": LEVEL_LABEL[tf_name], "Status": "—",
-                        "Bias": "—", "Deviation": "—", "Quant Score": "—",
-                    })
-                else:
-                    mtf_rows.append({
-                        "Level": LEVEL_LABEL[tf_name],
-                        "Status": state["status"],
-                        "Bias": round(state["bias"], 2),
-                        "Deviation": round(state["dev"], 2),
-                        "Quant Score": round(state["vol_score"], 0),
-                    })
-            mtf_df = pd.DataFrame(mtf_rows)
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-            def _style_status(val):
-                v = str(val)
-                if v == "Active":
-                    return "background-color: rgba(34,197,94,0.12); color: #22C55E; font-weight: 600;"
-                if v == "Exhaustion":
-                    return "background-color: rgba(245,158,11,0.12); color: #F59E0B; font-weight: 600;"
-                if v == "Bias Only":
-                    return "background-color: rgba(0,209,178,0.10); color: #00D1B2; font-weight: 600;"
-                if v == "Quiet":
-                    return "color: #9CA3AF;"
-                return ""
+    # ══════════════════════════════════════
+    # HIGHEST DECAY PRESSURE (with clear numbering)
+    # ══════════════════════════════════════
+    if not decay_df.empty:
 
-            styled_mtf = mtf_df.style.map(_style_status, subset=["Status"])
+        hd_col, share_col = st.columns([6, 1])
+        with hd_col:
+            st.markdown("""
+            <div class="decay-header">
+              <span class="decay-title">⚡ Highest Decay Pressure</span>
+              <span style='font-family:IBM Plex Mono;font-size:0.65rem;color:#484f58;'>
+                CE = orange &nbsp;·&nbsp; PE = green
+              </span>
+            </div>""", unsafe_allow_html=True)
 
-            st.dataframe(
-                styled_mtf,
-                use_container_width=True, hide_index=True,
-                column_config={
-                    "Level": st.column_config.TextColumn("Level", width="small"),
-                    "Status": st.column_config.TextColumn("Status", width="medium"),
-                    "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
-                    "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                    "Quant Score": st.column_config.NumberColumn("Quant Score", format="%.0f"),
-                },
-            )
+        r1, r2 = st.columns(2)
+        cols_cycle = [r1, r2]
+        for i, (_, row) in enumerate(decay_df.iterrows()):
+            worst = decay_df['charm_val'].min()
+            pct   = int(abs(row['charm_val'] / worst) * 100)
+            bar_class  = "decay-bar-ce"  if row['type'] == 'CE' else "decay-bar-pe"
+            badge_class = "decay-type-ce" if row['type'] == 'CE' else "decay-type-pe"
+            with cols_cycle[i % 2]:
+                st.markdown(f"""
+                <div class="decay-row">
+                  <div class="decay-rank">#{i+1}</div>
+                  <div class="decay-strike">{int(row['strike']):,}</div>
+                  <div class="{badge_class}">{row['type']}</div>
+                  <div class="decay-val">{row['charm_val']:.4f}</div>
+                  <div class="decay-bar-wrap">
+                    <div class="{bar_class}" style="width:{pct}%"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
-            ticker_hist = df[df["ticker"] == row["ticker"]].copy()
-            if len(ticker_hist) >= 1:
-                st.markdown("#### Signal History · This Instrument")
-                timeline_fig = build_signal_timeline(ticker_hist)
-                st.plotly_chart(timeline_fig, use_container_width=True,
-                                config={"displayModeBar": False})
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-            st.markdown("#### Swing Context")
-            s1, s2, s3, s4 = st.columns(4)
-            s1.metric("Recent High", f"{ctx['recent_high']:.2f}",
-                      f"{ctx['dist_from_high']:.2f}%")
-            s2.metric("Recent Low", f"{ctx['recent_low']:.2f}",
-                      f"{ctx['dist_from_low']:+.2f}%")
-            s3.metric("Bars Since Signal", ctx["bars_since"])
-            s4.metric("Change Since", f"{ctx['change_since']:+.2f}%")
+        st.markdown('<div class="section-head">DECAY CHART</div>', unsafe_allow_html=True)
+        decay_fig = make_decay_bar_chart(decay_df, height=300)
+        st.plotly_chart(decay_fig, use_container_width=True, config={
+            "displayModeBar": True,
+            "modeBarButtonsToKeep": ["toImage"],
+            "toImageButtonOptions": {
+                "format": "png",
+                "filename": f"fintrix_decay_{st.session_state.underlying}_{st.session_state.expiry_input}",
+                "width": 1000, "height": 400, "scale": 2
+            }
+        })
 
-            related = df[(df["ticker"] == row["ticker"])].copy()
-            if len(related) > 1:
-                related = related.drop(df.index[idx]) if idx in df.index else related
-                if not related.empty:
-                    st.markdown("#### Related Signals · Same Instrument")
-                    rel = related.reset_index(drop=True)
-                    rel.insert(0, "Rank", range(1, len(rel) + 1))
-                    rel["Timestamp"] = rel["datetime"].dt.strftime("%d %b %Y · %H:%M")
-                    rel["Level"] = rel["timeframe"].map(LEVEL_LABEL)
-                    rel["Last Price"] = rel["close"].round(2)
-                    rel["Deviation"] = rel["distance_pct"].round(2)
-                    rel["Bias"] = rel["raw_di_diff"].round(2)
-                    st.dataframe(
-                        rel[["Rank", "Timestamp", "Level", "Last Price",
-                             "Deviation", "Bias"]],
-                        use_container_width=True, hide_index=True,
-                        column_config={
-                            "Rank": st.column_config.NumberColumn("#", width="small"),
-                            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
-                            "Level": st.column_config.TextColumn("Level", width="small"),
-                            "Last Price": st.column_config.NumberColumn("Last", format="%.2f"),
-                            "Deviation": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
-                            "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
-                        },
-                    )
+    else:
+        st.info("No negative Charm strikes found in current data.")
 
+# ════════════════════════════════════════════
+# TAB 2 — VANNA + TABLE
+# ════════════════════════════════════════════
+with tab2:
 
-# ─── TAB 3: ANALYTICS ───────────────────────────────────
-with tab_diag:
-    st.markdown("### Detection Funnel")
-    d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Filter 1 Match", diag["stage_a"])
-    d2.metric("Filter 2 Match", diag["stage_b"])
-    d3.metric("Qualified", diag["final"])
-    d4.metric("No Data", diag["empty_data"])
-    st.caption(
-        f"Window cutoff: {out['cutoff']} · Duration: {out['scan_time_s']}s · "
-        f"Instruments processed: {out.get('tickers_processed', 0)}"
+    st.markdown('<div class="section-head">VANNA BY STRIKE</div>', unsafe_allow_html=True)
+    st.plotly_chart(make_vanna_chart(gk_df, spot, ceil_zone, floor_zone, height=360),
+                    use_container_width=True, config={"displayModeBar": False})
+
+    col_ceil, col_floor = st.columns(2)
+    with col_ceil:
+        if ceil_zone:
+            st.markdown(f"""
+            <div style='background:#0f1117;border:1px solid #3b82f6;border-left:3px solid #3b82f6;
+            border-radius:4px;padding:14px 18px;margin-bottom:12px;'>
+              <div style='font-family:IBM Plex Mono;font-size:0.6rem;color:#3b82f6;
+              letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;'>Vanna Ceiling Zone</div>
+              <div style='font-family:IBM Plex Mono;font-size:1.5rem;font-weight:600;color:#e6edf3;'>
+                {int(ceil_zone[0]):,} – {int(ceil_zone[1]):,}
+              </div>
+              <div style='font-size:0.65rem;color:#484f58;font-family:IBM Plex Mono;margin-top:4px;'>
+                IV crush → dealer BUY pressure above spot
+              </div>
+            </div>""", unsafe_allow_html=True)
+    with col_floor:
+        if floor_zone:
+            st.markdown(f"""
+            <div style='background:#0f1117;border:1px solid #ef4444;border-left:3px solid #ef4444;
+            border-radius:4px;padding:14px 18px;margin-bottom:12px;'>
+              <div style='font-family:IBM Plex Mono;font-size:0.6rem;color:#ef4444;
+              letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;'>Vanna Floor Zone</div>
+              <div style='font-family:IBM Plex Mono;font-size:1.5rem;font-weight:600;color:#e6edf3;'>
+                {int(floor_zone[0]):,} – {int(floor_zone[1]):,}
+              </div>
+              <div style='font-size:0.65rem;color:#484f58;font-family:IBM Plex Mono;margin-top:4px;'>
+                IV spike → dealer SELL pressure below spot
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="section-head">FULL STRIKE TABLE</div>', unsafe_allow_html=True)
+    disp = gk_df[['dex','vanna','charm','charm_ce','charm_pe','call_oi','put_oi','call_iv','put_iv']].copy()
+    disp.columns = ['DEX','Vanna','Charm','Charm CE','Charm PE','Call OI','Put OI','Call IV','Put IV']
+    disp = disp[(disp['Call OI'] > 0) | (disp['Put OI'] > 0)]
+    st.dataframe(
+        disp.style.format({
+            'DEX':'{:+.3f}','Vanna':'{:+.4f}','Charm':'{:+.4f}',
+            'Charm CE':'{:+.4f}','Charm PE':'{:+.4f}',
+            'Call OI':'{:.0f}','Put OI':'{:.0f}',
+            'Call IV':'{:.4f}','Put IV':'{:.4f}'
+        }).map(   # <--- FIX: changed from applymap to map
+            lambda v: 'color:#ef4444' if isinstance(v,float) and v<0
+                      else 'color:#22c55e' if isinstance(v,float) and v>0 else '',
+            subset=['DEX','Vanna','Charm','Charm CE','Charm PE']
+        ),
+        use_container_width=True, height=440
     )
 
-
-# ─── TAB 4: NOTES ───────────────────────────────────────
-with tab_err:
-    if not out["errors"]:
-        st.success("No exceptions — all instruments processed cleanly.")
-    else:
-        st.warning(f"{len(out['errors'])} instrument(s) returned a processing note.")
-        st.dataframe(pd.DataFrame(out["errors"], columns=["Instrument", "Note"]),
-                     use_container_width=True, hide_index=True)
-
-
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
 # FOOTER
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
 st.markdown(f"""
-<div class="fintrix-footer">
-    <div class="brand">{BRAND_NAME}</div>
-    <div class="tag">{BRAND_TAG}</div>
+<div style='margin-top:24px;padding-top:10px;border-top:1px solid #21262d;
+font-family:IBM Plex Mono;font-size:0.6rem;color:#30363d;
+display:flex;justify-content:space-between;'>
+  <span>FINTRIX ANALYTICS · AVFINANCIAL</span>
+  <span>LAST UPDATE: {last_upd.strftime('%Y-%m-%d %H:%M:%S')}</span>
+  <span>SOURCE: NUBRA PROD · BS GREEKS</span>
 </div>
 """, unsafe_allow_html=True)
