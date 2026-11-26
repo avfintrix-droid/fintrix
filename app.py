@@ -607,6 +607,65 @@ TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
 
 
 # ─────────────────────────────────────────────────────────
+# QUANT TREND UNIVERSE (index & macro instruments)
+# ─────────────────────────────────────────────────────────
+QUANT_TREND_UNIVERSE = {
+    "GSPC":       "S&P 500",
+    "IXIC":       "Nasdaq Composite",
+    "NDX":        "Nasdaq 100",
+    "DJI":        "Dow Jones",
+    "RUT":        "Russell 2000",
+    "NSEI":       "Nifty 50",
+    "BSESN":      "BSE Sensex",
+    "NSEBANK":    "Bank Nifty",
+    "INDIAVIX":   "India VIX",
+    "FTSE":       "FTSE 100",
+    "GDAXI":      "DAX",
+    "FCHI":       "CAC 40",
+    "STOXX50E":   "Euro Stoxx 50",
+    "N225":       "Nikkei 225",
+    "HSI":        "Hang Seng",
+    "000001.SS":  "Shanghai Composite",
+    "KS11":       "KOSPI",
+    "AXJO":       "ASX 200",
+    "STI":        "Straits Times",
+    "GC=F":       "Gold",
+    "SI=F":       "Silver",
+    "HG=F":       "Copper",
+    "PL=F":       "Platinum",
+    "PA=F":       "Palladium",
+    "CL=F":       "Crude Oil",
+    "BZ=F":       "Brent Crude",
+    "NG=F":       "Natural Gas",
+    "VIX":        "VIX",
+    "DX-Y.NYB":   "Dollar Index",
+    "USDINR=X":   "USD/INR",
+    "TNX":        "US 10Y Yield",
+    "BTC-USD":    "Bitcoin",
+    "ETH-USD":    "Ethereum",
+    "CNXIT":      "NIFTY IT",
+    "CNXAUTO":    "NIFTY Auto",
+    "CNXPHARMA":  "NIFTY Pharma",
+    "CNXMETAL":   "NIFTY Metal",
+    "CNXENERGY":  "NIFTY Energy",
+    "CNXINFRA":   "NIFTY Infra",
+    "CNXREALTY":  "NIFTY Realty",
+    "CNXFMCG":    "NIFTY FMCG",
+    "CNXPSUBANK": "NIFTY PSU Bank",
+    "CNXCMDT":    "NIFTY Commodities",
+    "CRSLDX":     "NIFTY 500",
+    "NSEMDCP50":  "NIFTY Midcap 50",
+}
+
+
+def to_yahoo_index_symbol(sym: str) -> str:
+    """Map a raw index key to its Yahoo Finance symbol."""
+    if any(ch in sym for ch in ["^", "=", "-"]) or "." in sym:
+        return sym
+    return "^" + sym
+
+
+# ─────────────────────────────────────────────────────────
 # INDICATOR HELPERS
 # ─────────────────────────────────────────────────────────
 def ta_ema(series, length):
@@ -714,6 +773,109 @@ def batch_fetch(tickers, period="60d", interval="15m"):
             out[symbols[0].replace(".NS", "")] = df
 
     return out, None
+
+
+# ─────────────────────────────────────────────────────────
+# QUANT TREND FETCH (indices / macro, trend horizon)
+# ─────────────────────────────────────────────────────────
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_quant_trend_fetch(symbols_tuple):
+    symbols = [to_yahoo_index_symbol(s) for s in symbols_tuple]
+    if not symbols:
+        return None, "No symbols"
+    try:
+        raw = yf.download(
+            symbols, period="1y", interval="1d",
+            progress=False, auto_adjust=True, threads=True,
+            group_by="ticker",
+        )
+    except Exception as e:
+        return None, f"Download error: {e}"
+    if raw is None or raw.empty:
+        return None, "No data returned"
+    return raw, None
+
+
+def scan_quant_trend(indices, progress_cb=None):
+    """Scan the quant trend universe for instruments whose directional bias
+    has moved below -10 on the latest reading."""
+    raw, err = cached_quant_trend_fetch(tuple(indices))
+    if err:
+        return None, err
+
+    yahoo_syms = [to_yahoo_index_symbol(s) for s in indices]
+    results = []
+    items = list(zip(yahoo_syms, indices))
+    total = max(len(items), 1)
+
+    for i, (ysym, orig) in enumerate(items, 1):
+        try:
+            if isinstance(raw.columns, pd.MultiIndex):
+                available = raw.columns.get_level_values(0).unique()
+                if ysym not in available:
+                    if progress_cb: progress_cb(i / total)
+                    continue
+                df = raw[ysym].dropna(how="all")
+            else:
+                if len(items) == 1:
+                    df = raw.dropna(how="all")
+                else:
+                    if progress_cb: progress_cb(i / total)
+                    continue
+
+            if df.empty or len(df) < 100:
+                if progress_cb: progress_cb(i / total)
+                continue
+
+            df = df.copy()
+            df.columns = [str(c).lower() for c in df.columns]
+
+            if "volume" not in df.columns:
+                df["volume"] = 1.0
+            else:
+                df["volume"] = df["volume"].fillna(1.0).replace(0, 1.0)
+
+            for col in ["open", "high", "low", "close"]:
+                if col not in df.columns:
+                    raise ValueError(f"missing column: {col}")
+
+            scanned = detect_signals(df)
+            if len(scanned) == 0:
+                if progress_cb: progress_cb(i / total)
+                continue
+
+            latest = scanned.iloc[-1]
+            bias_val = latest["raw_di_diff"]
+            if pd.isna(bias_val) or bias_val >= -10:
+                if progress_cb: progress_cb(i / total)
+                continue
+
+            crossed_now = False
+            if len(scanned) >= 2:
+                prev_bias = scanned.iloc[-2]["raw_di_diff"]
+                if pd.notna(prev_bias) and prev_bias >= -10:
+                    crossed_now = True
+
+            last_date = scanned.index[-1]
+            date_str = (last_date.strftime("%d %b %Y")
+                        if hasattr(last_date, "strftime")
+                        else str(last_date)[:10])
+
+            results.append({
+                "symbol":        orig,
+                "display":       QUANT_TREND_UNIVERSE.get(orig, orig),
+                "close":         float(latest["close"]),
+                "distance_pct":  float(latest["distance_pct"]),
+                "raw_di_diff":   float(bias_val),
+                "crossed_now":   crossed_now,
+                "date_str":      date_str,
+            })
+        except Exception:
+            pass
+
+        if progress_cb: progress_cb(i / total)
+
+    return results, None
 
 
 # ─────────────────────────────────────────────────────────
@@ -1070,7 +1232,6 @@ live, status_label = market_status()
 pill_cls = "status-live" if live else "status-closed"
 dot_cls  = "dot-live" if live else "dot-closed"
 
-# Rotate quote roughly every 30 seconds (changes on rerun / refresh)
 _rotating_quote = QUOTES[int(time.time() // 30) % len(QUOTES)]
 
 st.markdown(f"""
@@ -1148,11 +1309,13 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 if clear_btn:
     st.session_state.scan_out = None
+    st.session_state.qt_results = None
     st.rerun()
 
 if refresh_btn:
     st.cache_data.clear()
     st.session_state.scan_out = None
+    st.session_state.qt_results = None
     st.success("Cache cleared. Next scan will pull fresh data.")
 
 
@@ -1161,6 +1324,8 @@ if refresh_btn:
 # ─────────────────────────────────────────────────────────
 if "scan_out" not in st.session_state:
     st.session_state.scan_out = None
+if "qt_results" not in st.session_state:
+    st.session_state.qt_results = None
 
 if run_btn:
     if not selected_tfs:
@@ -1236,8 +1401,8 @@ k2.metric("Signals Detected", len(df),
 k3.metric("Scan Duration", f"{out['scan_time_s']}s")
 k4.metric("Active Levels", levels_str)
 
-tab_sig, tab_chart, tab_diag, tab_err = st.tabs(
-    ["SIGNALS", "CHART", "ANALYTICS", "NOTES"]
+tab_sig, tab_qt, tab_chart, tab_diag, tab_err = st.tabs(
+    ["SIGNALS", "QUANT TREND", "CHART", "ANALYTICS", "NOTES"]
 )
 
 
@@ -1313,7 +1478,116 @@ with tab_sig:
         st.caption("Highlighted rows mark the three most recent signals.")
 
 
-# ─── TAB 2: CHART ───────────────────────────────────────
+# ─── TAB 2: QUANT TREND ─────────────────────────────────
+with tab_qt:
+    st.markdown("#### Quant Trend · Cross-Below Detection")
+    st.caption(
+        "Instruments where the quant trend has crossed below -10 on the latest reading. "
+        "Only qualified instruments are surfaced here."
+    )
+
+    qtc1, qtc2 = st.columns([1, 2])
+    with qtc1:
+        qt_run = st.button(
+            "RUN QUANT TREND",
+            use_container_width=True,
+            type="primary",
+            key="qt_run_btn",
+        )
+    with qtc2:
+        if st.session_state.get("qt_results"):
+            qt_export_df = pd.DataFrame(st.session_state.qt_results)
+            if not qt_export_df.empty:
+                qt_export_df = qt_export_df.sort_values("raw_di_diff").reset_index(drop=True)
+                exp = qt_export_df[["display", "close", "distance_pct", "raw_di_diff"]].copy()
+                exp.columns = ["Instrument", "Last", "Dev %", "Bias"]
+                st.download_button(
+                    "Export Quant Trend",
+                    data=exp.to_csv(index=False).encode("utf-8"),
+                    file_name=f"quant_trend_{datetime.now():%Y%m%d_%H%M}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+    if qt_run:
+        progress_qt = st.progress(0.0, text="Scanning instruments…")
+
+        def _qt_prog(p):
+            progress_qt.progress(min(p, 1.0), text=f"Scanning… {int(p*100)}%")
+
+        qt_results, qt_err = scan_quant_trend(
+            list(QUANT_TREND_UNIVERSE.keys()),
+            progress_cb=_qt_prog,
+        )
+        progress_qt.empty()
+
+        if qt_err:
+            st.error(f"Quant trend scan failed: {qt_err}")
+        else:
+            st.session_state.qt_results = qt_results
+            st.session_state.qt_scan_ts = datetime.now(pytz.timezone("Asia/Kolkata"))
+
+    qt_results = st.session_state.get("qt_results")
+
+    if qt_results is None:
+        st.info("Click 'RUN QUANT TREND' to detect instruments crossing below -10.")
+    elif not qt_results:
+        st.success("No instruments are currently below -10. All clear.")
+    else:
+        scan_ts = st.session_state.get("qt_scan_ts")
+        ts_str = scan_ts.strftime("%d %b %Y · %H:%M IST") if scan_ts else "—"
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Below -10", len(qt_results))
+        fresh = sum(1 for r in qt_results if r["crossed_now"])
+        m2.metric("Fresh Crosses", fresh)
+        m3.metric("Last Scan", ts_str)
+
+        qt_df = pd.DataFrame(qt_results)
+        qt_df = qt_df.sort_values("raw_di_diff").reset_index(drop=True)
+        qt_df.insert(0, "Rank", range(1, len(qt_df) + 1))
+        qt_df["Last"] = qt_df["close"].round(2)
+        qt_df["Deviation"] = qt_df["distance_pct"].round(2)
+        qt_df["Bias"] = qt_df["raw_di_diff"].round(2)
+        qt_df["Status"] = qt_df["crossed_now"].apply(
+            lambda x: "Fresh Cross" if x else "Sustained"
+        )
+
+        disp_qt = qt_df[[
+            "Rank", "display", "date_str", "Last", "Deviation", "Bias", "Status"
+        ]].copy()
+        disp_qt.columns = ["#", "Instrument", "As Of", "Last", "Dev %", "Bias", "Status"]
+
+        def _qt_style(row):
+            if row["Status"] == "Fresh Cross":
+                return ['background-color: rgba(239, 68, 68, 0.12); '
+                        'color: #EF4444; font-weight: 600'] * len(row)
+            return [''] * len(row)
+
+        styled_qt = disp_qt.style.apply(_qt_style, axis=1)
+
+        st.dataframe(
+            styled_qt,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "#": st.column_config.NumberColumn("#", width="small"),
+                "Instrument": st.column_config.TextColumn("Instrument", width="medium"),
+                "As Of": st.column_config.TextColumn("As Of", width="small"),
+                "Last": st.column_config.NumberColumn("Last", format="%.2f"),
+                "Dev %": st.column_config.NumberColumn("Dev %", format="%.2f%%"),
+                "Bias": st.column_config.NumberColumn("Bias", format="%.2f"),
+                "Status": st.column_config.TextColumn("Status", width="small"),
+            },
+        )
+
+        st.caption(
+            "Fresh Cross marks instruments where the crossing occurred on the "
+            "latest reading. Sustained marks instruments where the condition has persisted."
+        )
+
+
+# ─── TAB 3: CHART ───────────────────────────────────────
 with tab_chart:
     if df.empty:
         st.info("No signals available — run a scan with at least one qualified hit.")
@@ -1456,7 +1730,7 @@ with tab_chart:
                     )
 
 
-# ─── TAB 3: ANALYTICS ───────────────────────────────────
+# ─── TAB 4: ANALYTICS ───────────────────────────────────
 with tab_diag:
     st.markdown("### Detection Funnel")
     d1, d2, d3, d4 = st.columns(4)
@@ -1470,7 +1744,7 @@ with tab_diag:
     )
 
 
-# ─── TAB 4: NOTES ───────────────────────────────────────
+# ─── TAB 5: NOTES ───────────────────────────────────────
 with tab_err:
     if not out["errors"]:
         st.success("No exceptions — all instruments processed cleanly.")
