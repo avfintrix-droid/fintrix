@@ -607,7 +607,7 @@ TIMEFRAME_MAP = {"15m": "15min", "30m": "30min", "45m": "45min", "60m": "60min"}
 
 
 # ─────────────────────────────────────────────────────────
-# QUANT TREND UNIVERSE (index & macro instruments)
+# QUANT TREND UNIVERSE (indices / macro + every stock)
 # ─────────────────────────────────────────────────────────
 QUANT_TREND_UNIVERSE = {
     "GSPC":       "S&P 500",
@@ -663,6 +663,33 @@ def to_yahoo_index_symbol(sym: str) -> str:
     if any(ch in sym for ch in ["^", "=", "-"]) or "." in sym:
         return sym
     return "^" + sym
+
+
+def _build_qt_universe():
+    """Combined Quant Trend universe: every index/macro entry + every stock."""
+    items = []
+    seen = set()
+
+    # Indices & macro
+    for key, disp in QUANT_TREND_UNIVERSE.items():
+        ysym = to_yahoo_index_symbol(key)
+        if ysym in seen:
+            continue
+        seen.add(ysym)
+        items.append((ysym, disp))
+
+    # Stocks
+    for t in ALL_SYMBOLS:
+        ysym = f"{t}.NS"
+        if ysym in seen:
+            continue
+        seen.add(ysym)
+        items.append((ysym, t))
+
+    return items
+
+
+QT_UNIVERSE_ITEMS = _build_qt_universe()
 
 
 # ─────────────────────────────────────────────────────────
@@ -776,16 +803,16 @@ def batch_fetch(tickers, period="60d", interval="15m"):
 
 
 # ─────────────────────────────────────────────────────────
-# QUANT TREND FETCH (indices / macro, trend horizon)
+# QUANT TREND FETCH (indices + stocks, trend horizon)
 # ─────────────────────────────────────────────────────────
 @st.cache_data(ttl=1800, show_spinner=False)
 def cached_quant_trend_fetch(symbols_tuple):
-    symbols = [to_yahoo_index_symbol(s) for s in symbols_tuple]
-    if not symbols:
+    """Download the trend horizon data for a tuple of already-mapped Yahoo symbols."""
+    if not symbols_tuple:
         return None, "No symbols"
     try:
         raw = yf.download(
-            symbols, period="1y", interval="1d",
+            list(symbols_tuple), period="1y", interval="1d",
             progress=False, auto_adjust=True, threads=True,
             group_by="ticker",
         )
@@ -796,19 +823,21 @@ def cached_quant_trend_fetch(symbols_tuple):
     return raw, None
 
 
-def scan_quant_trend(indices, progress_cb=None):
-    """Scan the quant trend universe for instruments whose directional bias
-    has moved below -10 on the latest reading."""
-    raw, err = cached_quant_trend_fetch(tuple(indices))
+def scan_quant_trend(items, progress_cb=None):
+    """Scan the Quant Trend universe for instruments whose directional bias
+    has fallen below the trend threshold on the latest reading."""
+    if not items:
+        return None, "No symbols"
+
+    yahoo_syms = tuple(y for y, _ in items)
+    raw, err = cached_quant_trend_fetch(yahoo_syms)
     if err:
         return None, err
 
-    yahoo_syms = [to_yahoo_index_symbol(s) for s in indices]
     results = []
-    items = list(zip(yahoo_syms, indices))
     total = max(len(items), 1)
 
-    for i, (ysym, orig) in enumerate(items, 1):
+    for i, (ysym, disp) in enumerate(items, 1):
         try:
             if isinstance(raw.columns, pd.MultiIndex):
                 available = raw.columns.get_level_values(0).unique()
@@ -862,8 +891,8 @@ def scan_quant_trend(indices, progress_cb=None):
                         else str(last_date)[:10])
 
             results.append({
-                "symbol":        orig,
-                "display":       QUANT_TREND_UNIVERSE.get(orig, orig),
+                "symbol":        ysym,
+                "display":       disp,
                 "close":         float(latest["close"]),
                 "distance_pct":  float(latest["distance_pct"]),
                 "raw_di_diff":   float(bias_val),
@@ -1482,8 +1511,8 @@ with tab_sig:
 with tab_qt:
     st.markdown("#### Quant Trend · Cross-Below Detection")
     st.caption(
-        "Instruments where the quant trend has crossed below -10 on the latest reading. "
-        "Only qualified instruments are surfaced here."
+        "Combined scan across the index / macro universe and every stock in the platform list. "
+        "Only instruments whose trend condition has triggered on the latest reading are surfaced here."
     )
 
     qtc1, qtc2 = st.columns([1, 2])
@@ -1516,7 +1545,7 @@ with tab_qt:
             progress_qt.progress(min(p, 1.0), text=f"Scanning… {int(p*100)}%")
 
         qt_results, qt_err = scan_quant_trend(
-            list(QUANT_TREND_UNIVERSE.keys()),
+            QT_UNIVERSE_ITEMS,
             progress_cb=_qt_prog,
         )
         progress_qt.empty()
@@ -1530,15 +1559,15 @@ with tab_qt:
     qt_results = st.session_state.get("qt_results")
 
     if qt_results is None:
-        st.info("Click 'RUN QUANT TREND' to detect instruments crossing below -10.")
+        st.info("Click 'RUN QUANT TREND' to surface instruments currently flagged by the quant trend.")
     elif not qt_results:
-        st.success("No instruments are currently below -10. All clear.")
+        st.success("No instruments are currently flagged. All clear.")
     else:
         scan_ts = st.session_state.get("qt_scan_ts")
         ts_str = scan_ts.strftime("%d %b %Y · %H:%M IST") if scan_ts else "—"
 
         m1, m2, m3 = st.columns(3)
-        m1.metric("Below -10", len(qt_results))
+        m1.metric("Flagged", len(qt_results))
         fresh = sum(1 for r in qt_results if r["crossed_now"])
         m2.metric("Fresh Crosses", fresh)
         m3.metric("Last Scan", ts_str)
